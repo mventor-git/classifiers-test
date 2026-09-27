@@ -115,6 +115,16 @@ record(8, has, f"torch={diag['torch']} laya={diag['laya']} cuda={diag['cuda_avai
                f"vram={diag.get('vram_used_mb')}MB rss={diag['rss_gb']}GB · "
                f"PROJECT_STATE.md {'matches' if has else 'MISSING or STALE'}")
 
+gate(9, "Text visibility: WCAG AA in light and dark")
+contrast = subprocess.run(
+    [sys.executable, str(REPO / "tools" / "contrast.py")],
+    cwd=REPO, capture_output=True, text=True)
+tail = [ln.strip() for ln in contrast.stdout.splitlines() if "pass" in ln and "/" in ln]
+record(9, contrast.returncode == 0,
+       (tail[-1] if tail else "audit produced no summary") +
+       ("" if contrast.returncode == 0
+        else " :: " + " ".join(contrast.stdout.split()[-12:]) + contrast.stderr[-200:]))
+
 # -------------------------------------------------- report
 print()
 print("=" * 78)

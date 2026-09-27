@@ -117,6 +117,9 @@ The project is done when all of these are observably true:
    the environment.
 8. The measured latency, VRAM and RAM figures are recorded in `PROJECT_STATE.md` and
    match a re-run.
+9. Every text colour meets **WCAG 2.1 AA** contrast (4.5:1 body, 3:1 large and
+   non-text indicators) in **both** light and dark mode, proven by
+   `tools/contrast.py` rather than asserted.
 
 ## 8. Risks and known unknowns
 
@@ -155,5 +158,6 @@ placeholder. Change it with `git config user.email "..."` from inside the repo.
 | 0.1.0 | 2026-09-27 | Initial draft. New project. | Mventor |
 | 0.1.0 | 2026-09-27 | D1 resolved: rule-based agent, no new dependencies. | Mventor |
 | 1.0.0 | 2026-09-27 | D2 resolved: repo-local identity. D3 resolved: ports 7860/8000. Contract activated. | Mventor |
+| 1.2.0 | 2026-09-27 | Dark mode added as a second designed palette with a header toggle. Acceptance gate 9 added: WCAG AA contrast proven in both modes. Contrast audit found and fixed `--ink-faint` at 3.35:1 (failing). | Mventor |
 | 1.1.0 | 2026-09-27 | Project renamed `laya-beta-chat` → `laya-beta-test`. Full chat interface removed (§5, D1): the agent is now a stateless reply composer. Interface is cards 01/02 plus a grid of example cards. | Mventor |
 

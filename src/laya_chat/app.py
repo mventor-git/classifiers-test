@@ -24,39 +24,102 @@ from laya_chat import agent, engine, presets  # noqa: E402
 import gradio as gr  # noqa: E402
 
 CARD_CSS = """
-/* ---- palette: warm cream surfaces, copper accent, espresso text ---- */
+/* ==========================================================================
+   PALETTE
+   Light and dark are two designed palettes, not one inverted.
+   Every text/background pair below is asserted in tools/contrast.py against
+   WCAG AA (4.5:1 body, 3:1 large). Light --ink-faint was #9a8a76 at 3.35:1
+   and FAILED; it is #7d6e5c at 4.93:1 now.
+   ========================================================================== */
 :root {
-    --ink:        #2b2119;
-    --ink-soft:   #6b5b49;
-    --ink-faint:  #9a8a76;
-    --cream:      #fbf8f3;
-    --cream-deep: #f3ebe0;
-    --surface:    #ffffff;
-    --line:       #e8dfd1;
-    --copper:     #b0601f;
-    --copper-dk:  #8f4a12;
-    --teal:       #0f6f66;
-    --good:       #2f7d4f;
-    --bad:        #b3402e;
-    --shadow:     0 1px 2px rgba(43,33,25,.05), 0 6px 18px rgba(43,33,25,.06);
-    --shadow-hi:  0 2px 4px rgba(43,33,25,.07), 0 14px 34px rgba(43,33,25,.11);
-    --radius:     16px;
+    --page-a:      #fbf8f3;
+    --page-b:      #f3ebe0;
+    --surface:     #ffffff;
+    --surface-2:   #fdfaf6;
+    --line:        #e8dfd1;
+    --line-hi:     #dccfb9;
+    --ink:         #2b2119;   /* 15.7:1 on surface */
+    --ink-soft:    #6b5b49;   /*  6.5:1 */
+    --ink-faint:   #7d6e5c;   /*  4.9:1  (was 3.35:1 - failed AA) */
+    --copper:      #a85a1c;   /*  5.1:1 with white text */
+    --copper-dk:   #8a4410;
+    --teal:        #0f6f66;   /*  6.0:1 */
+    --good:        #2f7d4f;   /*  5.0:1 */
+    --bad:         #b3402e;   /*  5.7:1 */
+    --shadow:      0 1px 2px rgba(43,33,25,.05), 0 6px 18px rgba(43,33,25,.06);
+    --shadow-hi:   0 2px 4px rgba(43,33,25,.07), 0 14px 34px rgba(43,33,25,.11);
+    --ring:        rgba(168,90,28,.45);
+    --radius:      16px;
 }
+
+/* Dark rules come after :root so they win on equal specificity.
+   html[data-theme="dark"] is an explicit user choice and beats the media query. */
+html[data-theme="dark"] {
+    --page-a:      #14110e;
+    --page-b:      #0d0b0a;
+    --surface:     #211c18;
+    --surface-2:   #2a2420;
+    --line:        #3a322b;
+    --line-hi:     #4d4239;
+    --ink:         #f4eee6;   /* 14.6:1 on surface */
+    --ink-soft:    #c9bcae;   /*  9.1:1 */
+    --ink-faint:   #a89a8c;   /*  6.2:1 */
+    --copper:      #e8964f;   /*  7.1:1 */
+    --copper-dk:   #d07f3a;
+    --teal:        #5ecfbe;   /*  9.0:1 */
+    --good:        #6fcf97;
+    --bad:         #f08a7d;
+    --shadow:      0 1px 2px rgba(0,0,0,.4), 0 6px 18px rgba(0,0,0,.45);
+    --shadow-hi:   0 2px 4px rgba(0,0,0,.5), 0 14px 34px rgba(0,0,0,.55);
+    --ring:        rgba(232,150,79,.55);
+    color-scheme: dark;
+}
+@media (prefers-color-scheme: dark) {
+    html:not([data-theme="light"]) {
+        --page-a:      #14110e;
+        --page-b:      #0d0b0a;
+        --surface:     #211c18;
+        --surface-2:   #2a2420;
+        --line:        #3a322b;
+        --line-hi:     #4d4239;
+        --ink:         #f4eee6;
+        --ink-soft:    #c9bcae;
+        --ink-faint:   #a89a8c;
+        --copper:      #e8964f;
+        --copper-dk:   #d07f3a;
+        --teal:        #5ecfbe;
+        --good:        #6fcf97;
+        --bad:         #f08a7d;
+        --shadow:      0 1px 2px rgba(0,0,0,.4), 0 6px 18px rgba(0,0,0,.45);
+        --shadow-hi:   0 2px 4px rgba(0,0,0,.5), 0 14px 34px rgba(0,0,0,.55);
+        --ring:        rgba(232,150,79,.55);
+        color-scheme: dark;
+    }
+}
+
+/* ---- page ---- */
 body {
     background:
-        radial-gradient(1100px 520px at 12% -8%, #fff6e9 0%, transparent 60%),
-        radial-gradient(900px 460px at 88% 4%, #eef6f4 0%, transparent 55%),
-        linear-gradient(180deg, var(--cream) 0%, var(--cream-deep) 100%) !important;
+        radial-gradient(1100px 520px at 12% -8%, rgba(255,246,233,.9) 0%, transparent 60%),
+        radial-gradient(900px 460px at 88% 4%, rgba(238,246,244,.9) 0%, transparent 55%),
+        linear-gradient(180deg, var(--page-a) 0%, var(--page-b) 100%) !important;
     background-attachment: fixed !important;
     color: var(--ink) !important;
     font-family: "Segoe UI", system-ui, -apple-system, "Noto Sans Arabic",
                  "Noto Sans", "Helvetica Neue", sans-serif !important;
 }
-h1 {
-    font-weight: 800 !important;
-    letter-spacing: -0.02em !important;
-    color: var(--ink) !important;
+html[data-theme="dark"] body,
+html:not([data-theme="light"]) body { transition: background-color .3s ease; }
+@media (prefers-color-scheme: dark) {
+    html:not([data-theme="light"]) body {
+        background:
+            radial-gradient(1100px 520px at 12% -8%, rgba(60,44,28,.55) 0%, transparent 60%),
+            radial-gradient(900px 460px at 88% 4%, rgba(24,54,52,.5) 0%, transparent 55%),
+            linear-gradient(180deg, var(--page-a) 0%, var(--page-b) 100%) !important;
+    }
 }
+h1 { font-weight: 800 !important; letter-spacing: -0.02em !important;
+     color: var(--ink) !important; }
 h1 + p, .prose p { color: var(--ink-soft) !important; }
 code, pre { border-radius: 8px !important; }
 footer, .gradio-container footer { display: none !important; }
@@ -68,12 +131,14 @@ footer, .gradio-container footer { display: none !important; }
     padding: 20px 22px !important;
     background: var(--surface) !important;
     box-shadow: var(--shadow) !important;
+    color: var(--ink) !important;
     height: 100%;
-    transition: box-shadow .28s ease, transform .28s ease, border-color .28s ease;
+    transition: box-shadow .28s ease, transform .28s ease, border-color .28s ease,
+                background-color .3s ease;
     animation: cardIn .55s cubic-bezier(.2,.7,.3,1) both;
 }
 .card:hover { box-shadow: var(--shadow-hi) !important; transform: translateY(-2px);
-              border-color: #dccfb9 !important; }
+              border-color: var(--line-hi) !important; }
 @keyframes cardIn {
     from { opacity: 0; transform: translateY(14px) scale(.995); }
     to   { opacity: 1; transform: none; }
@@ -88,8 +153,8 @@ footer, .gradio-container footer { display: none !important; }
     min-width: 32px; height: 32px; padding: 0 9px;
     border-radius: 9px; color: #fff;
     font-weight: 800; font-size: .78rem; letter-spacing: .08em;
-    background: linear-gradient(140deg, var(--copper) 0%, #8a4a2f 100%);
-    box-shadow: 0 2px 7px rgba(176,96,31,.32);
+    background: linear-gradient(140deg, var(--copper) 0%, var(--copper-dk) 100%);
+    box-shadow: 0 2px 7px rgba(0,0,0,.22);
 }
 .card-title { font-weight: 750; font-size: 1.06rem; color: var(--ink); flex: 1;
               letter-spacing: -0.01em; }
@@ -98,14 +163,14 @@ footer, .gradio-container footer { display: none !important; }
 .card-label { font-weight: 700; font-size: .88rem; margin-bottom: 7px; color: var(--ink); }
 .card-msg {
     font-size: .85rem; line-height: 1.55; padding: 11px 13px; margin-bottom: 11px;
-    border-radius: 10px; background: #fdfaf6; color: var(--ink-soft);
+    border-radius: 10px; background: var(--surface-2); color: var(--ink-soft);
     min-height: 78px; max-height: 132px; overflow-y: auto;
     border-right: 3px solid var(--copper);
     transition: background .25s ease, border-color .25s ease;
 }
-.card:hover .card-msg { background: #fbf5ec; border-right-color: var(--teal); }
+.card:hover .card-msg { border-right-color: var(--teal); }
 .card-expect { font-size: .78rem; color: var(--teal); margin-bottom: 11px;
-               font-weight: 600; }
+               font-weight: 650; }
 
 /* ---- answer panel: fades in on every new result ---- */
 .anim-replay { animation: answerIn .42s cubic-bezier(.2,.7,.3,1) both; }
@@ -121,20 +186,22 @@ button {
     border-radius: 11px !important;
     font-weight: 650 !important;
     letter-spacing: .005em !important;
-    transition: transform .16s ease, box-shadow .2s ease, filter .2s ease !important;
+    color: var(--ink) !important;
+    transition: transform .16s ease, box-shadow .2s ease, filter .2s ease,
+                background-color .3s ease !important;
 }
 button:hover:not(:disabled) { transform: translateY(-1px); filter: brightness(1.04); }
 button:active:not(:disabled) { transform: translateY(0) scale(.985); }
 button:focus-visible, textarea:focus-visible, input:focus-visible, select:focus-visible {
-    outline: 3px solid rgba(176,96,31,.45) !important;
+    outline: 3px solid var(--ring) !important;
     outline-offset: 2px !important;
 }
 button.primary {
     background: linear-gradient(135deg, var(--copper) 0%, var(--copper-dk) 100%) !important;
     border: none !important; color: #fff !important;
-    box-shadow: 0 2px 8px rgba(176,96,31,.30) !important;
+    box-shadow: 0 2px 8px rgba(0,0,0,.24) !important;
 }
-button.primary:hover:not(:disabled) { box-shadow: 0 6px 20px rgba(176,96,31,.42) !important; }
+button.primary:hover:not(:disabled) { box-shadow: 0 6px 20px rgba(0,0,0,.32) !important; }
 button.primary::after {
     content: ""; position: absolute; inset: 0; border-radius: 11px;
     background: linear-gradient(115deg, transparent 30%, rgba(255,255,255,.34) 50%,
@@ -152,29 +219,68 @@ button.primary::after {
 textarea, input, select {
     border-color: var(--line) !important;
     border-radius: 11px !important;
-    background: #fdfbf8 !important;
-    transition: border-color .2s ease, box-shadow .2s ease !important;
+    background: var(--surface-2) !important;
+    color: var(--ink) !important;
+    caret-color: var(--copper) !important;
+    transition: border-color .2s ease, box-shadow .2s ease, background-color .3s ease !important;
 }
 textarea:focus, input:focus, select:focus {
     border-color: var(--copper) !important;
-    box-shadow: 0 0 0 3px rgba(176,96,31,.12) !important;
+    box-shadow: 0 0 0 3px var(--ring) !important;
 }
+textarea::placeholder, input::placeholder { color: var(--ink-faint) !important;
+                                            opacity: 1 !important; }
 .block, .form, .panel, .gr-box { background: transparent !important; }
 .tabs > .tab-nav { border-bottom: 1px solid var(--line) !important; }
 .tabs > .tab-nav button { font-weight: 650 !important; color: var(--ink-soft) !important; }
-.tabs > .tab-nav button.selected { color: var(--copper-dk) !important;
+.tabs > .tab-nav button.selected { color: var(--copper) !important;
                                    border-bottom: 2px solid var(--copper) !important; }
 
 /* ---- answer typography ---- */
-#answer-wrap ul, .answer-in ul { padding-left: 4px !important; }
-.answer-in strong { color: var(--ink); }
-.answer-in small, .answer-in .card-expect small { color: var(--ink-faint) !important; }
+.anim-replay strong, .anim-replay b { color: var(--ink) !important; }
+.anim-replay small { color: var(--ink-faint) !important; }
+.anim-replay a { color: var(--teal) !important; }
+
+/* ---- theme toggle ---- */
+#theme-toggle { min-width: 108px; }
 
 @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after {
         animation-duration: .001ms !important; animation-iteration-count: 1 !important;
         transition-duration: .001ms !important;
     }
+}
+"""
+
+# Applies the chosen theme before first paint, so there is no white flash.
+THEME_BOOT_JS = """
+() => {
+  const KEY = 'laya-theme';
+  const root = document.documentElement;
+  let saved = null;
+  try { saved = localStorage.getItem(KEY); } catch (e) {}
+  if (saved === 'dark' || saved === 'light') {
+    root.setAttribute('data-theme', saved);
+  }
+  const paint = () => {
+    const dark = root.getAttribute('data-theme') === 'dark' ||
+      (!root.getAttribute('data-theme') &&
+       window.matchMedia('(prefers-color-scheme: dark)').matches);
+    const b = document.getElementById('theme-toggle');
+    if (b) b.textContent = dark ? 'Light mode' : 'Dark mode';
+  };
+  window.__layaToggleTheme = () => {
+    const now = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+    root.setAttribute('data-theme', now);
+    try { localStorage.setItem(KEY, now); } catch (e) {}
+    // Gradio 6 reads ?__theme= for its own components. Keep the URL in step.
+    const u = new URL(window.location.href);
+    u.searchParams.set('__theme', now);
+    window.history.replaceState(null, '', u);
+    paint();
+  };
+  window.addEventListener('load', paint);
+  setTimeout(paint, 60);
 }
 """
 
@@ -304,13 +410,17 @@ def build():
         f"- **{n}** — {p['label']}: {p['note']}" for n, p in presets.PRESETS.items())
 
     with gr.Blocks(title="Laya", theme=gr.themes.Soft(), css=CARD_CSS) as demo:
-        gr.Markdown(
-            "# Laya\n\n"
-            "Put a message in **card 01**, press **Decide**, and the model's answers "
-            "land in **card 02** — about 90 ms later, on your own graphics card.\n\n"
-            "> It does **not** write replies. Every value in card 02 is returned by "
-            "the model, not written by it."
-        )
+        with gr.Row():
+            gr.Markdown(
+                "# Laya\n\n"
+                "Put a message in **card 01**, press **Decide**, and the model's "
+                "answers land in **card 02** — about 90 ms later, on your own "
+                "graphics card.\n\n"
+                "> It does **not** write replies. Every value in card 02 is "
+                "returned by the model, not written by it."
+            )
+            theme_btn = gr.Button("Dark mode", elem_id="theme-toggle",
+                                  scale=0, min_width=108, size="sm")
 
         with gr.Tabs():
             # ============================== cards 01 + 02 ==============================
@@ -433,6 +543,8 @@ def build():
         # A MutationObserver is the reliable way to do this: it fires after
         # Gradio has swapped the content, so no polling and no double-binding.
         demo.load(js=REPLAY_JS)
+        demo.load(js=THEME_BOOT_JS)
+        theme_btn.click(js="() => window.__layaToggleTheme && window.__layaToggleTheme()")
     return demo
 
 

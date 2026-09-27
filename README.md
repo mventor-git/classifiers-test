@@ -77,6 +77,18 @@ Write your own in the Questions box. Three types:
 Bound to `127.0.0.1`. Reachable from this machine only — not your network, not the
 internet. There is no authentication, so **do not** change the host to `0.0.0.0`.
 
+## Appearance
+
+**Dark mode** — press the button in the header, or just let it follow Windows. Your
+choice is remembered. Two designed palettes, not one inverted: dark is warm charcoal
+with a lighter copper accent, because an accent that reads on cream disappears on
+charcoal.
+
+Every text colour in both modes is checked against WCAG AA by
+`tools/contrast.py` — currently **14/14 pass**, worst case 4.93:1 against a 4.5:1
+bar. That audit found a real one: the faint grey used for placeholders and answer
+footnotes was 3.35:1 and failing. It is fixed.
+
 ## Layout
 
 ```
@@ -92,7 +104,8 @@ src/laya_chat/
   config.py               paths, device, ports, limits. no version numbers.
   app.py                  the Gradio page. formats only, decides nothing.
 tests/test_agent.py       26 tests, including "never invents a value"
-tools/acceptance.py       runs the 8 contract gates
+tools/acceptance.py       runs the 9 contract gates
+tools/contrast.py         WCAG audit of both palettes
 .venv/  .data/            inside the repo, gitignored
 ```
 
@@ -100,6 +113,7 @@ tools/acceptance.py       runs the 8 contract gates
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest tests -q
+.\.venv\Scripts\python.exe tools\contrast.py
 .\.venv\Scripts\python.exe tools\acceptance.py
 ```
 

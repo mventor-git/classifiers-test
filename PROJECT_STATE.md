@@ -83,7 +83,7 @@ German and French. `noul` refund detection was correct on every case tried.
 classified **angry at 61%**, which is wrong — that message is calm and factual.
 Treat tone as a hint, not a fact.
 
-## Acceptance gates — 8/8
+## Acceptance gates — 9/9
 
 | Gate | Result |
 |---|---|
@@ -95,27 +95,74 @@ Treat tone as a hint, not a fact.
 | 6. No version string in `src/` | PASS |
 | 7. Lockfile + one documented setup command | PASS |
 | 8. These figures recorded and matching a re-run | PASS |
+| 9. Text visibility: WCAG AA in light **and** dark | PASS |
 
 Re-run them any time:
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest tests -q
+.\.venv\Scripts\python.exe tools\contrast.py
 .\.venv\Scripts\python.exe tools\acceptance.py
 ```
+
+## Text visibility review
+
+Audited with `tools/contrast.py`, which parses the real CSS out of `app.py` and
+computes WCAG 2.1 contrast for every text colour against the surface it sits on.
+
+**14/14 pairs pass AA.** Worst case in either mode is 4.93:1; the AA bar is 4.5:1.
+
+| Token | Light on `#ffffff` | Dark on `#211c18` |
+|---|---|---|
+| `--ink` body text | 15.74:1 | 14.65:1 |
+| `--ink-soft` secondary | 6.53:1 | 9.07:1 |
+| `--ink-faint` hints, placeholders | **4.93:1** | 6.16:1 |
+| `--teal` expected answers | 6.02:1 | 8.96:1 |
+| `--good` / `--bad` | 5.04 / 5.69 | 8.88 / 6.94 |
+| `--copper` accent, as indicator | 5.07:1 | 7.16:1 |
+
+**One real failure was found and fixed.** `--ink-faint` was `#9a8a76` at
+**3.35:1** — below AA, and it was the colour of every placeholder, every `<small>`
+line in the answer, and the card metadata. It is now `#7d6e5c` at 4.93:1 in light
+and `#a89a8c` at 6.16:1 in dark. That is the whole substance of the visibility
+review: one token, used widely, failing quietly.
+
+The auditor also self-checks: it feeds itself a known-bad colour and fails if it
+does *not* reject it, so a green run means something rather than meaning the
+regex silently stopped matching.
+
+## Dark mode
+
+Two designed palettes, not one inverted. Dark is warm charcoal (`#14110e` page,
+`#211c18` surface) with a *lighter* copper accent (`#e8964f`) and a bright teal,
+because accents that read on cream disappear on charcoal.
+
+Three ways it activates, in priority order:
+
+1. The **Dark mode** button in the header — sets `data-theme`, persists to
+   `localStorage`, and syncs Gradio's own `?__theme=` URL parameter.
+2. The saved choice, restored on load before first paint (no white flash).
+3. `prefers-color-scheme: dark` when nothing is saved.
+
+The explicit `data-theme` attribute wins over the media query on specificity, and
+the auditor asserts that the media-query copy of the palette is byte-identical to
+the toggle's copy — otherwise a user who never pressed the button would see a
+different dark theme from one who did.
 
 ## Not verified
 
 - **The live browser page has never been rendered.** Every gate except 1 runs
-  headless. `start.ps1` parses clean and the Gradio UI builds (98 blocks, 9 example
-  cards), but nobody has clicked the page. **First double-click is the real test.**
-- **No animation has been seen.** The entrance, hover and answer-replay animations
-  are CSS plus one `MutationObserver`; they were not visually confirmed.
+  headless. `start.ps1` parses clean and the Gradio UI builds (100 blocks, 9 example
+  cards, theme toggle present), but nobody has clicked the page. **First double-click
+  is the real test.**
+- **No animation or colour has been seen.** The entrance, hover, sheen and
+  answer-replay animations, and both palettes, are CSS plus one `MutationObserver`.
+  The contrast numbers are computed, not eyeballed — but a wrong *hue* still
+  passes a contrast check.
 - **n8n integration is not implemented.** The engine is reachable from Python, not
-  over HTTP. There is no `/predict` endpoint in this project — the earlier
-  `laya-server` playground was a different tool and is not part of this repo.
+  over HTTP. There is no `/predict` endpoint in this project.
 - **Calibration is not fitted.** The model ships uncalibrated (ECE 0.314) and stays
   that way. Fixing it needs labelled data that does not exist yet.
-- **Dark mode is not supported.** The palette is a fixed light theme.
 
 ## Known risks
 
