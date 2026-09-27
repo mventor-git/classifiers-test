@@ -1,19 +1,23 @@
-﻿# laya-beta-test - pinned environment
+﻿# classifiers-test - pinned environment
 #
 # GENERATED from the working environment on 2026-09-27 by `uv pip freeze`.
-# Do not hand-edit. Reproduce the environment with:
+# Do not hand-edit. Reproduce with installer.ps1 (recommended) or:
 #
 #   uv venv --python 3.12 .venv
-#   uv pip install --python .venv\Scripts\python.exe torch ^
+#   uv pip install --python .venv\Scripts\python.exe torch torchvision ^
 #       --index-url https://download.pytorch.org/whl/cu126
 #   uv pip install --python .venv\Scripts\python.exe -r requirements.lock.txt
+#   .venv\Scripts\python.exe tools\fetch_models.py
 #
-# Why cu126: this machine has a GTX 1060 (sm_61, Pascal). CUDA 12.x supports
-# sm_61; CUDA 13.0 REMOVED Pascal. cu128 stops at torch 2.11.0 and cu129 at
-# 2.9.0, so cu126 is the only index with a current torch that still runs here.
-# Re-verify `get_arch_list()` after any torch bump.
+# Why cu126: the reference machine has a GTX 1060 (sm_61, Pascal). CUDA 12.x
+# supports sm_61; CUDA 13.0 REMOVED Pascal. cu128 stops at torch 2.11.0 and
+# cu129 at 2.9.0, so cu126 is the only index with a current torch that still
+# runs on that card. A plain `pip install torch` on Windows is CPU-only.
 #
-# Python 3.12.14. Contract acceptance gate 6: no version string appears in src/.
+# torchvision is required by the image classifier: transformers'
+# AutoImageProcessor will not load without it.
+#
+# Python 3.12.14. Contract acceptance gate: no version string in src/.
 annotated-doc==0.0.5
 annotated-types==0.8.0
 anyio==4.15.1
@@ -34,6 +38,7 @@ httpcore==1.0.9
 httpx==0.28.1
 huggingface-hub==1.33.0
 idna==3.20
+iniconfig==2.3.0
 jinja2==3.1.6
 laya==0.3.20
 markdown-it-py==4.2.0
@@ -46,11 +51,13 @@ orjson==3.12.0
 packaging==26.3
 pandas==3.0.6
 pillow==12.3.0
+pluggy==1.6.0
 psutil==7.2.2
 pydantic==2.13.5
 pydantic-core==2.46.5
 pydub==0.25.1
 pygments==2.21.0
+pytest==9.1.1
 python-dateutil==2.9.0.post0
 python-multipart==0.0.32
 pytz==2026.4
@@ -68,6 +75,7 @@ sympy==1.14.0
 tokenizers==0.23.2
 tomlkit==0.14.0
 torch==2.14.0+cu126
+torchvision==0.29.0+cu126
 tqdm==4.70.1
 transformers==5.17.0
 typer==0.27.2

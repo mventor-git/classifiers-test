@@ -1,4 +1,4 @@
-﻿"""Interface layer.
+"""Interface layer.
 
 Contract section 5: renders engine and agent output, holds no domain logic. Every
 value shown here came from the engine via agent.py; this file formats and displays.
@@ -18,8 +18,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from laya_chat import config  # noqa: E402
-from laya_chat import agent, engine, presets  # noqa: E402
+from classifiers import config  # noqa: E402
+from classifiers.text import agent, engine, presets
+from classifiers.image import presets as image_presets  # noqa: E402
 
 import gradio as gr  # noqa: E402
 
@@ -522,6 +523,100 @@ def use_example(label):
     return "", presets.DEFAULT_PRESET
 
 
+def classify_url(url):
+    """Fetch an image from a URL and classify it. Card 04 -> card 05.
+
+    This is how Unsplash photos are used: the repository stores the URL, never
+    the photograph, and the bytes are fetched on this machine only when asked.
+    image/remote.py guards the request.
+    """
+    from classifiers.image import engine as image_engine, agent as image_agent, remote
+
+    url = (url or "").strip()
+    if not url:
+        return image_agent.compose([])
+
+    try:
+        data, ctype, final = remote.fetch(url)
+    except ValueError as exc:
+        return (f"**Refused.**\n\n{exc}\n\n"
+                f"<small>Only https, and only the hosts listed in "
+                f"`classifiers/image/remote.py`.</small>", "", [])
+
+    t0 = time.perf_counter()
+    result = image_engine.classify(data)
+    dt = (time.perf_counter() - t0) * 1000
+    name = final.rsplit("/", 1)[-1].split("?")[0] or "image"
+    result.update(name=name, url=final, ctype=ctype)
+    markdown, meta, rows = image_agent.compose([result])
+    return markdown, (f"{meta} · fetched + {dt:.0f} ms" if meta else ""), rows
+
+
+# ------------------------------------------------------------------ image tab
+def _collect(paths):
+    """Gradio hands back a list of paths, a single path, or a tempfile object."""
+    if not paths:
+        return []
+    if isinstance(paths, (str, Path)):
+        return [paths]
+    if isinstance(paths, (list, tuple)):
+        return [p for p in paths if p]
+    return [paths]
+
+
+def classify_images(files):
+    """Card 04 -> card 05. Delegates to the image agent; decides nothing."""
+    from classifiers.image import engine as image_engine, agent as image_agent
+
+    paths = _collect(files)
+    if not paths:
+        return image_agent.compose([])
+
+    missing = image_engine.ensure_dependencies()
+    if missing:
+        return (f"**Missing dependencies:** `{'`, `'.join(missing)}`\n\n"
+                f"Run `installer.ps1` again to install them.", "", [])
+
+    t0 = time.perf_counter()
+    try:
+        results = image_engine.classify_many(paths)
+    except Exception as exc:  # noqa: BLE001
+        return f"**The image model failed.**\n\n`{type(exc).__name__}: {exc}`", "", []
+    dt = (time.perf_counter() - t0) * 1000
+
+    markdown, meta, rows = image_agent.compose(results)
+    if meta:
+        meta = f"{meta} · {dt:.0f} ms"
+    return markdown, meta, rows
+
+
+def free_image_model():
+    """Manual VRAM release, for when the user wants the headroom back now."""
+    from classifiers import gpu
+    from classifiers.image import engine as image_engine
+    was = image_engine.resident()
+    image_engine.release()
+    if not was:
+        return f"The image model was not loaded. {gpu.report()}"
+    return f"Image model unloaded. {gpu.report()}"
+
+
+def image_status():
+    from classifiers import gpu
+    from classifiers.image import engine as image_engine, agent as image_agent
+    d = image_engine.diagnostics()
+    state = "resident in VRAM" if d["loaded"] else "not loaded"
+    return (f"**{config.IMAGE_MODEL_ID}** — {image_agent.how_it_works()}\n\n"
+            f"- state: {state}\n"
+            f"- {gpu.report()}\n"
+            f"- process RAM: {d['rss_gb']} GB\n\n"
+            f"<small>Weights fetched with a three-file allowlist. The upstream "
+            f"repository also contains `training_args.bin`, a pickle the Hub "
+            f"flags as unsafe; it is never downloaded.</small>")
+
+
+
+
 def batch_decide(lines, preset_name, questions_json):
     """The throughput path: one question set over many messages."""
     texts = [ln.strip() for ln in (lines or "").splitlines() if ln.strip()]
@@ -590,8 +685,11 @@ def build():
                                   scale=0, min_width=108, size="sm")
 
         with gr.Tabs():
+            # Only the selected classifier's tabs exist for this process. A hidden
+            # tab cannot be reached, so its model is never loaded - which is the
+            # whole point of choosing at startup rather than managing VRAM later.
             # ============================== cards 01 + 02 ==============================
-            with gr.Tab("Decide", id="decide"):
+            with gr.Tab("Decide", id="decide", visible=config.WANT_TEXT):
                 with gr.Row(equal_height=True):
                     with gr.Column(elem_classes=["card"], scale=1, min_width=430):
                         with gr.Row(elem_classes=["card-top"]):
@@ -652,8 +750,69 @@ def build():
                     btn.click(use_example, inputs=[gr.State(label)],
                               outputs=[message, preset_box])
 
+            # ================================ image ================================
+            with gr.Tab("Image", id="image", visible=config.WANT_IMAGE):
+                gr.Markdown(
+                    "## AI or human?\n\n"
+                    "Attach one image or a whole folder's worth. The second model "
+                    "here is a fine-tuned **SigLIP**: it looks at a 224×224 thumbnail "
+                    "and returns `ai` or `hum` with probabilities."
+                )
+                with gr.Row(equal_height=True):
+                    with gr.Column(elem_classes=["card"], scale=1, min_width=430):
+                        with gr.Row(elem_classes=["card-top"]):
+                            gr.HTML('<span class="card-num">04</span>')
+                            gr.HTML('<span class="card-title">Attach images</span>')
+                            img_run = gr.Button("Classify ▶", variant="primary",
+                                                scale=0, min_width=130, elem_id="img-run")
+                        upload = gr.File(
+                            label="Attach images — drop, or browse",
+                            file_count="multiple",
+                            file_types=image_presets.IMAGE_EXTS,
+                            type="filepath",
+                            height=170)
+                        preview = gr.Image(label="First image", height=170,
+                                           interactive=False, visible=False)
+
+                        gr.Markdown("**Or paste an image URL**")
+                        url_box = gr.Textbox(
+                            label="Image URL (https only)",
+                            placeholder=image_presets.EXAMPLE_URLS[0],
+                            lines=2)
+                        with gr.Row():
+                            url_run = gr.Button("Fetch and classify ▶",
+                                                variant="primary", scale=0,
+                                                min_width=170)
+                        gr.Markdown(
+                            "Try one: " + " · ".join(
+                                f"<details><summary>{u.split('photo-')[-1][:18]}…</summary>"
+                                f"`{u}`</details>" for u in image_presets.EXAMPLE_URLS[:2])
+                            + f" — or any of the {len(image_presets.EXAMPLE_URLS)} in "
+                              f"`classifiers/image/presets.py`.")
+
+                        gr.Markdown("**Model**")
+                        img_status = gr.Markdown(image_status())
+                        free_btn = gr.Button("Unload the image model",
+                                             size="sm", scale=0)
+
+                    with gr.Column(elem_classes=["card"], scale=1, min_width=430,
+                                   variant="compact"):
+                        with gr.Row(elem_classes=["card-top"]):
+                            gr.HTML('<span class="card-num">05</span>')
+                            gr.HTML('<span class="card-title">The verdict</span>')
+                            img_clear = gr.Button("Clear", scale=0, min_width=84,
+                                                  size="sm")
+                        img_answer = gr.Markdown(
+                            '<div class="placeholder">Nothing yet. Press '
+                            '<b>Classify</b> in card 04.</div>',
+                            elem_id="img-answer", elem_classes=["anim-replay"])
+                        img_meta = gr.Markdown("")
+                        img_table = gr.Dataframe(
+                            headers=["file", "size", "verdict", "confidence"],
+                            interactive=False, visible=False, wrap=True)
+
             # ================================= batch =================================
-            with gr.Tab("Batch"):
+            with gr.Tab("Batch", visible=config.WANT_TEXT):
                 gr.Markdown("## Batch\n\nOne message per line, the same questions "
                             "applied to all of them in shared forward passes.")
                 b_preset = gr.Dropdown(PRESET_CHOICES, value=presets.DEFAULT_PRESET,
@@ -706,6 +865,26 @@ def build():
             outputs=[message, answer, meta])
         b_run.click(batch_decide, inputs=[b_input, b_preset, b_questions],
                     outputs=[b_out, b_summary])
+
+        # ---- image tab wiring
+        def _first(paths):
+            got = _collect(paths)
+            return gr.update(value=str(got[0]), visible=bool(got)) if got \
+                else gr.update(value=None, visible=False)
+
+        upload.change(_first, inputs=[upload], outputs=[preview])
+        img_run.click(classify_images, inputs=[upload],
+                      outputs=[img_answer, img_meta, img_table])
+        url_run.click(classify_url, inputs=[url_box],
+                      outputs=[img_answer, img_meta, img_table])
+        img_clear.click(
+            lambda: (gr.update(value=None), gr.update(value=None, visible=False),
+                     gr.update(value=""), gr.update(value=[], visible=False),
+                     gr.update(value='<div class="placeholder">Cleared.</div>'),
+                     gr.update(value=""), gr.update(value="")),
+            outputs=[upload, preview, img_status, img_table, img_answer, img_meta,
+                     url_box])
+        free_btn.click(free_image_model, outputs=[img_status])
 
         # Replay the answer animation whenever new results land in card 02.
         # A MutationObserver is the reliable way to do this: it fires after

@@ -1,158 +1,174 @@
-# laya-beta-test
+# classifiers-test
 
-A local web app that reads a message and tells you things about it — which team
-should handle it, is a refund being requested, what does the sender actually want —
-with probabilities, in about 90 ms, on your own graphics card. Nothing leaves the
-machine.
+Two small local classifiers behind one page. You pick which one you want before
+anything loads.
 
-**It does not write replies.** [`laya-multilingual`](https://huggingface.co/convaiinnovations/laya-multilingual)
-is a classifier, not a language model. Every value on screen was returned by the
-model. Read [`contract.md`](contract.md) before changing anything.
+| | **Text** | **Image** |
+|---|---|---|
+| Model | [`laya-multilingual`](https://huggingface.co/convaiinnovations/laya-multilingual) | [`ai-vs-human-image-detector`](https://huggingface.co/Ateeqq/ai-vs-human-image-detector) |
+| Gives you | typed decisions about a message | `ai` or `hum` for a picture |
+| Speed | ~85 ms | ~71 ms |
+| VRAM | 1884 MB | 402 MB |
 
----
-
-## Screenshots
-
-### Light mode
-
-![The Laya app in light mode: card 01 on the left holds the question and the Decide button, card 02 on the right is where the answer lands, and a grid of example cards sits underneath](docs/screenshots/light.png)
-
-*The default theme: warm cream page, white cards, the signature clay-orange
-accents. **Card 01** (left) takes the message and holds the **Decide** button in its
-header. **Card 02** (right) is where the model's answers land. Below both, a grid of
-**example cards** — each one loads its message into card 01 with a single click.*
-
-### Dark mode
-
-![The same Laya app in dark mode: charcoal surfaces, cream text, the same clay-orange accents on the 01, 02 and 03 badges](docs/screenshots/dark.png)
-
-*Dark mode is a second designed palette, not an inversion. The accent moves to a
-lighter clay so it stays visible against charcoal, and labels become cream on
-near-black. Toggle it with the button in the top right; the choice is remembered.*
+Neither writes prose. A classifier answers a question; it does not compose.
 
 ---
 
 ## Try it
 
 ```powershell
-git clone https://github.com/mventor-git/laya-beta-test
-cd laya-beta-test
+git clone https://github.com/mventor-git/classifiers-test
+cd classifiers-test
 powershell -ExecutionPolicy Bypass -File installer.ps1
 powershell -ExecutionPolicy Bypass -File start.ps1
 ```
 
-`installer.ps1` does everything: it detects whether you have an NVIDIA GPU,
-creates a Python 3.12 environment, installs the right PyTorch build, installs the
-pinned dependencies, downloads the ~647 MB of model weights, and verifies the
-result. Then `start.ps1` serves the app and opens your browser.
+`installer.ps1` detects your GPU, picks the right PyTorch build, installs 65 pinned
+packages, fetches both models, and verifies everything. Re-run it whenever: a
+model already on disk is reported as present and not downloaded again.
 
-No API key. No account. No cloud call. Nothing is uploaded.
+`start.ps1` then **asks which classifier you want**:
 
-<details>
-<summary>Already have the environment? What each piece does</summary>
+```
+  Which classifier do you want to load?
 
-| Step | What happens |
-|---|---|
-| device detection | NVIDIA present → CUDA build, otherwise CPU |
-| PyTorch | from the **cu126** index on a GPU, plain PyPI on CPU |
-| dependencies | `requirements.lock.txt`, 61 pinned packages |
-| weights | `snapshot_download` of `convaiinnovations/laya-multilingual` into `.data/huggingface` |
-| verify | prints torch / laya / gradio versions, CUDA status, free VRAM |
+    1  laya  - text decisions      tickets, emails, messages
+    2  image - AI vs human photo   drop in an image, get ai or hum
+    3  both  - both of the above
+```
 
-Force a specific device with `installer.ps1 -Device cpu`, or skip the download with
-`-SkipWeights` if you want to fetch it yourself.
-</details>
-
-### Why the weights are not in this repository
-
-The checkpoint is 647 MB of binaries. Committing it would put 647 MB in git history
-forever, where it can never be garbage-collected and every clone pays for it.
-`.gitignore` excludes `.data/` and `.venv/`; `installer.ps1` fetches the weights
-instead. That is the difference between "self-contained" and "a repository nobody
-wants to clone".
+That question is not cosmetic. On a 3 GB card the two models together leave
+**84 MB** of headroom, and a long text call on top of both peaks at 2988 of
+3072 MB — one allocation from a crash. Choosing one avoids the problem instead of
+managing it. Skip the prompt with `.\start.ps1 -Classifier image`.
 
 ---
 
-## The page
+## Screenshots
 
-**Card 01 — the question.** Paste a message, pick a question set (or write your own
-JSON), and press **Decide** at the top.
+### The text classifier
 
-**Card 02 — the answer.** The model's answers land here, with a confidence for each
-and the full probability spread. The line underneath shows the token count and how
-long it took.
+![The text tab: card 01 on the left takes a message and holds the Decide button, card 02 on the right is where the answers land, and a grid of example cards sits underneath](docs/screenshots/light.png)
 
-**Example cards.** Below them, one card per example. Each shows a real message and
-the decision it should produce. Press **Use this** to load it into card 01.
+*Light theme: warm cream page, white cards, clay accents. **Card 01** takes the
+message, **card 02** receives the answers, and the example grid below loads a
+message into card 01 with one click.*
 
-Two more tabs: **Batch** (one message per line, ~9 ms each) and **About**.
+![The same text tab in dark mode: charcoal surfaces, cream text, the same clay accents](docs/screenshots/dark.png)
 
-## Question sets
+*Dark mode is a second designed palette, not an inversion — the accent moves to a
+lighter clay so it stays visible on charcoal.*
 
-| Set | Asks |
-|---|---|
-| `triage` | Which team, and is a refund requested |
-| `intent` | What the sender wants, and whether it needs a human |
-| `tone` | Polite or not — **weakest set, treat as a hint** |
-| `score` | Severity on a scale — **opt-in, has a known bias, see below** |
+> The **image** tab has not been photographed. The screenshot tool could not
+> recover a headless browser on this machine. It is verified by driving its
+> functions directly, not by looking at it.
 
-Write your own in the Questions box. Three types:
+---
 
-- `choice` — pick one option. Keep it under 20 options.
-- `noul` — true or false.
-- `score` — a 0..top scale. **Avoid on non-English text.**
+## The image classifier
 
-## Honest limits
+Attach **PNG, JPEG, WebP, BMP, GIF or TIFF** — one or a whole batch — or paste an
+image **URL**. Each image is resized to 224×224 and run through one forward pass
+of a fine-tuned SigLIP, giving `ai` or `hum` with probabilities.
 
-- **Over-confident as shipped.** It will say 100% and be wrong. Calibration needs
-  labelled data this project does not have yet.
-- **Arabic macro accuracy measured at 0.400** on 20-way intent. Good for 3–8
-  buckets, not 20 fine labels.
-- **`score` questions have a measured position bias** in every language — 0 of 290
-  runs picked the first-listed option. The app warns you when you use one on
-  non-English text.
-- **`noul` can under-report "true".** Cross-check with a 2-option `choice`.
-- **Weak on low-resource languages**: Swahili, Tamil, Amharic.
-- **Routing is reliable; tone is not.** `department` was correct 10/10 in testing.
-  `tone` called a calm refund request "angry" at 61%.
+### Read this before you trust it
 
-## Safety
+The upstream model reports **99.2% test accuracy** and then, in the same
+paragraph, says *"Some users reported overfitting issues"*. Running it here on
+real Unsplash photographs:
 
-Bound to `127.0.0.1`. Reachable from this machine only — not your network, not the
-internet. There is no authentication, so **do not** change the host to `0.0.0.0`.
+| Photo | Verdict | Confidence |
+|---|---|---|
+| cat | `hum` (real) | 100.0% |
+| forest | `hum` (real) | 100.0% |
+| **Yosemite lake** | **`ai`** | **99.9%** |
+| mountain | `hum` (real) | 100.0% |
 
-## Appearance
+A real landscape photograph is called AI-generated at 99.9% confidence. A **flat
+blue rectangle** is called AI at 99.8%. The confidence numbers are not meaningful.
 
-**Dark mode** — press the button in the header, or let it follow your OS. Your
-choice is remembered.
+**No accuracy claim is made in this project**, and the caveat is shown on every
+result. This is a demo of the plumbing, not a detector you can rely on.
 
-Every text colour in both modes is checked against WCAG AA by
-`tools/contrast.py` — currently **20/20 pass**, worst case 4.53:1 against a 4.5:1
-bar. That audit has already caught two real regressions: a faint grey at 3.35:1 on
-placeholders, and a hover border at 1.51:1.
+---
+
+## Test images
+
+**No third-party photograph is committed to this repository.**
+
+Unsplash blocks automated access to its HTML — a plain fetch of a photo page
+returns **HTTP 401** — and their sanctioned route needs an API access key.
+Committing their images would also raise attribution questions.
+
+So, in order of preference:
+
+- **Paste a URL.** The repo stores the *URL*, never the image; the bytes are
+  fetched on your machine only when you press the button. Four working Unsplash
+  CDN links are in `classifiers/image/presets.py`.
+- **Drop any file** you already have.
+- **Generated fixtures** in `samples/`, drawn by `tools/make_samples.py` — no
+  licensing question at all, and they exercise the whole pipeline.
+
+### Fetching a URL is treated as a security boundary
+
+Letting an app fetch a URL you typed is the classic SSRF shape. `image/remote.py`
+enforces `https` only, refuses embedded credentials, resolves the host and
+rejects **any** private, loopback, link-local or reserved address, keeps a
+four-host allowlist, re-validates every redirect hop, caps the body at 20 MB, and
+sends no cookies. `tests/test_remote.py` covers 17 refused URLs including
+`169.254.169.254`, `127.0.0.1` and a suffix-spoofing attempt.
+
+Note this is a deliberate exception to "nothing leaves this machine": the request
+goes **out**, on your instruction, and carries no data with it.
+
+---
+
+## Two more things worth knowing
+
+**The unsafe pickle was never downloaded.** The image model's repository contains
+`training_args.bin`, which the Hub flags as unsafe — unpickling runs arbitrary
+code, and inference does not need it. It is fetched with a three-file
+**allowlist** (`config.json`, `preprocessor_config.json`, `model.safetensors`),
+so a `.bin` added upstream later cannot slip in. Verified: 363 MB, three files,
+zero pickles.
+
+**The text classifier is over-confident too.** It will say 100% and be wrong.
+Calibration needs labelled data this project does not have. Routing into 3–8
+buckets was correct 10/10 in testing; `tone` detection is not reliable.
+
+---
 
 ## Layout
 
 ```
-installer.ps1             one-command setup for a new machine
-start.ps1 / stop.ps1      run and stop
-setup.cmd                 the same install, for people who double-click
-contract.md               the constitution: vision, boundaries, acceptance gates
-PROJECT_STATE.md          measured figures, gate results, what is not verified
-requirements.lock.txt     61 pinned packages
-src/laya_chat/
-  engine.py               owns the model. one forward pass.
-  agent.py                composes a reply from engine values. never invents one.
-  presets.py              question sets and worked examples
-  config.py               paths, device, ports, limits. no version numbers.
-  app.py                  the Gradio page and the theme. formats only.
-tests/test_agent.py       26 tests, including "never invents a value"
-tools/acceptance.py       runs the 9 contract gates
-tools/contrast.py         WCAG audit of both palettes
-tools/snapshot.py         headless screenshots of both themes
-docs/screenshots/         the images used in this README
-.venv/  .data/            created by the installer, gitignored
+installer.ps1           one-command setup, both models, idempotent
+start.ps1 / stop.ps1    run and stop, with the classifier prompt
+contract.md             vision, boundaries, 12 acceptance gates
+PROJECT_STATE.md        measured numbers, and what is NOT verified
+requirements.lock.txt   65 pinned packages
+src/classifiers/
+  config.py             paths, both models, the mode switch, safety allowlist
+  gpu.py                the VRAM budget guard
+  app.py                the page. formats, decides nothing
+  text/
+    engine.py           owns laya. one forward pass.
+    agent.py            composes a reply from engine values. never invents one.
+    presets.py          question sets and worked examples
+  image/
+    engine.py           owns SigLIP. one forward pass per image.
+    agent.py            composes the verdict from engine values. never invents one.
+    presets.py          formats, label wording, example URLs, the caveats
+    remote.py           the URL guard
+tests/                  64 tests
+tools/acceptance.py     runs the 12 gates
+tools/contrast.py       WCAG audit of both themes
+tools/fetch_models.py   idempotent model fetch
+tools/make_samples.py   generates the sample fixtures
+docs/screenshots/       the images above
+.venv/  .data/          created by the installer, gitignored
 ```
+
+Each classifier is a peer with its own folder. Neither is embedded in the other.
 
 ## Verify it
 
@@ -164,15 +180,13 @@ docs/screenshots/         the images used in this README
 
 ## Hardware note
 
-Built and measured on an **RTX-free GTX 1060 (sm_61, Pascal)** with 16 GB of RAM.
-`installer.ps1` installs PyTorch from the `cu126` index on purpose: CUDA 13.0
-removed Pascal, and `cu128`/`cu129` no longer ship a current torch that runs on that
-card. A plain `pip install torch` on Windows silently gives you a **CPU-only** build
-and you lose the GPU. Roughly 90 ms per decision with the GPU, 1–3 s without.
+Built and measured on a **GTX 1060 (sm_61, Pascal)**, 16 GB RAM. PyTorch is pinned
+to the **cu126** index: CUDA 13.0 removed Pascal, and a plain `pip install torch`
+on Windows silently installs a **CPU-only** build. Both classifiers work without a
+GPU, roughly 3× slower.
 
-## Licence and model terms
+## Licence
 
-This project is Apache-2.0. The model,
-[`convaiinnovations/laya-multilingual`](https://huggingface.co/convaiinnovations/laya-multilingual),
-is Apache-2.0 and carries a commercial-use tag. It is downloaded at install time and
-is not redistributed here.
+This project is Apache-2.0. Both models are Apache-2.0 and are downloaded at
+install time, not redistributed here. `torchvision` is required by the image
+classifier; `transformers` will not load an `AutoImageProcessor` without it.

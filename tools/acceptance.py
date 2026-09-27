@@ -11,8 +11,9 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "src"))
 
-from laya_chat import config, engine, presets  # noqa: E402
-from laya_chat import agent  # noqa: E402
+from classifiers.text import engine, presets  # noqa: E402
+from classifiers.text import agent  # noqa: E402
+from classifiers import config  # noqa: E402
 
 results = []
 
@@ -93,15 +94,15 @@ parse = subprocess.run(
      "if($e -and $e.Count){$e.Count}else{0}"],
     capture_output=True, text=True)
 errs = parse.stdout.strip()
-app_ok = (REPO / "src" / "laya_chat" / "app.py").exists()
+app_ok = (REPO / "src" / "classifiers" / "app.py").exists()
 record(1, errs == "0" and app_ok,
        f"start.ps1 parse errors={errs} · app.py {'present' if app_ok else 'MISSING'} "
        "(live browser check is manual - see PROJECT_STATE.md)")
 
 gate(5, "Bound to 127.0.0.1 only")
 host = config.HOST
-share_ok = "share=False" in (REPO / "src" / "laya_chat" / "app.py").read_text(encoding="utf-8")
-no_public = "0.0.0.0" not in (REPO / "src" / "laya_chat" / "app.py").read_text(encoding="utf-8")
+share_ok = "share=False" in (REPO / "src" / "classifiers" / "app.py").read_text(encoding="utf-8")
+no_public = "0.0.0.0" not in (REPO / "src" / "classifiers" / "app.py").read_text(encoding="utf-8")
 record(5, host == "127.0.0.1" and share_ok and no_public,
        f"HOST={host} · share=False present={share_ok} · no 0.0.0.0 literal={no_public}")
 
@@ -124,6 +125,55 @@ record(9, contrast.returncode == 0,
        (tail[-1] if tail else "audit produced no summary") +
        ("" if contrast.returncode == 0
         else " :: " + " ".join(contrast.stdout.split()[-12:]) + contrast.stderr[-200:]))
+
+gate(10, "Each mode shows only its own tabs")
+from classifiers import config as cfg  # noqa: E402
+mode_results = subprocess.run(
+    [sys.executable, "-c",
+     "import os,sys;sys.path.insert(0,'src');"
+     "from classifiers.app import build;d=build();"
+     "print('|'.join(b.label for b in d.blocks.values() "
+     "if type(b).__name__=='Tab' and b.visible))"],
+    cwd=REPO, capture_output=True, text=True,
+    env={**__import__("os").environ, "CLASSIFIERS": cfg.APP_MODE})
+visible = mode_results.stdout.strip().splitlines()[-1] if mode_results.stdout.strip() else "?"
+want = set()
+if cfg.WANT_TEXT:
+    want |= {"Decide", "Batch"}
+if cfg.WANT_IMAGE:
+    want.add("Image")
+want.add("About")
+got = set(visible.split("|"))
+record(10, got == want, f"mode={cfg.APP_MODE} visible={sorted(got)} expected={sorted(want)}")
+
+gate(11, "Image classifier: a real image, and a clean error for a non-image")
+from classifiers.image import engine as image_engine  # noqa: E402
+from PIL import Image  # noqa: E402
+import tempfile  # noqa: E402
+probe_dir = Path(tempfile.mkdtemp(prefix="laya-gate-"))
+try:
+    good_p = probe_dir / "probe.png"
+    Image.new("RGB", (320, 240), (90, 130, 170)).save(good_p)
+    bad_p = probe_dir / "probe.txt"
+    bad_p.write_text("not an image")
+    r1 = image_engine.classify(str(good_p))
+    r2 = image_engine.classify(str(bad_p))
+    lab = r1.get("label") if r1.get("ok") else None
+    record(11, bool(lab) and lab in ("ai", "hum") and r2.get("ok") is False
+           and "error" in r2 and r2.get("label") is None,
+           f"real image -> {lab} at {r1.get('confidence', 0):.1%} · "
+           f"non-image -> ok={r2.get('ok')} label={r2.get('label')} "
+           f"(must be no verdict)")
+finally:
+    import shutil
+    shutil.rmtree(probe_dir, ignore_errors=True)
+
+gate(12, "No pickle ever reached the model cache")
+data_dir = REPO / ".data"
+picks = [p.relative_to(REPO) for p in data_dir.rglob("*")
+         if p.is_file() and p.suffix.lower() in (".bin", ".pt", ".pth", ".ckpt", ".pkl")
+         and ".venv" not in str(p)]
+record(12, not picks, "none found" if not picks else f"FOUND: {picks}")
 
 # -------------------------------------------------- report
 print()

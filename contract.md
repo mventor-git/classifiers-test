@@ -1,9 +1,10 @@
-# Project Contract — laya-beta-chat
+# Project Contract — classifiers-test
 
 | | |
 |---|---|
-| **Project root** | `C:\Users\Mventor\github\repositories\laya-beta-test` |
-| **Version** | **1.1.0** |
+| **Project root** | `C:\Users\Mventor\github\repositories\local-classifiers-test` |
+| **Remote** | `https://github.com/mventor-git/classifiers-test` |
+| **Version** | **2.0.0** |
 | **Status** | **ACTIVE.** Approved by Mventor, 2026-09-27. |
 | **Date** | 2026-09-27 |
 | **Owner** | Mventor |
@@ -16,148 +17,169 @@ or a research report.
 
 ## 1. Vision
 
-A local, single-user web app that reads a message, email or ticket and returns
-**typed decisions** about it — routed team, refund requested, language, tone — with
-probabilities, in under 200 ms, with no cloud calls and no data leaving the machine.
+A local page that puts **two small classifiers** behind one interface and asks you
+which one you want before it loads anything:
 
-It is a **decision engine with a conversational interface**, not a writer. It answers
-questions about text. It does not produce prose.
+1. **Text** — `laya-multilingual`. Read a message, get typed decisions about it.
+2. **Image** — `Ateeqq/ai-vs-human-image-detector`. Drop in a picture, get `ai` or
+   `hum` with probabilities.
+
+Both run on this machine's GPU, neither sends anything anywhere, and neither
+writes prose. A classifier answers a question; it does not compose.
 
 ## 2. Problem
 
-Ticket triage and inbound-message routing are mechanical classification problems
-wearing a chat costume. Existing options either send data to a cloud API, or require
-a machine with more VRAM than this one has. `laya-multilingual` is a 322M-parameter
-non-autoregressive classifier that answers typed questions in a single forward pass
-across 100+ languages — and it runs on this PC's GTX 1060 in 85–95 ms.
+Two useful models, two different shapes — text in, decisions out; image in, one
+label out — and one hard constraint: a 3 GB graphics card. Measured, the text
+model is 1884 MB and the image model pushes the total to 2781 MB; a 4096-token
+text call with both resident peaks at **2988 of 3072 MB**, one allocation from an
+out-of-memory crash.
 
-The product gap is the interface, not the model.
+So the choice of which model to run is made **before** anything loads, not
+negotiated at runtime. The interface is the product; the models are interchangeable
+parts behind it.
 
 ## 3. Goals
 
-1. **Runs on this PC.** GPU-accelerated, no cloud dependency, no API key.
-2. **Answers every question in one forward pass.** Never loop one call per question.
-3. **Multi-language by default.** Arabic and English are first-class; 100+ languages work.
-4. **Self-contained repository.** Dependencies and model data live inside the project
-   directory, so the project runs from one folder on one machine.
-5. **Explainable output.** Every answer carries its confidence and its full probability
-   distribution. No hidden judgement.
-6. **Safe by default.** Binds to `127.0.0.1` only. No tunnel, no public link.
+1. **Runs on this PC.** GPU-accelerated, no cloud, no API key.
+2. **One model at a time by default.** Asking at startup removes the memory
+   question instead of managing it.
+3. **Multi-language text.** Arabic and English first-class; 100+ languages work.
+4. **Any image format.** Drop in PNG, JPEG, WebP, BMP, GIF or TIFF, one or many.
+5. **Self-contained.** Dependencies and both models live inside the project
+   directory; `installer.ps1` recreates them from scratch.
+6. **Explainable output.** Every answer carries its confidence and its full
+   probability distribution.
+7. **Safe by default.** Binds to `127.0.0.1`. No pickle is ever downloaded.
 
 ## 4. Non-goals
 
-- **Not a text generator.** No prose, no summaries, no replies, no rewriting.
-- **Not a general-purpose LLM chat.** It does not hold a conversation for its own sake.
-- **Not a fine-tuned production classifier.** Uncalibrated, and known-weak on
-  low-resource languages. Accuracy work is out of scope.
+- **Not a text generator.** No prose, no summaries, no replies.
+- **Not an image generator.** It classifies images; it does not make them.
+- **Not a validated detector.** Neither model has been evaluated on this
+  project's data. See §8.
 - **Not multi-user, not authenticated, not internet-facing.**
-- **Not mobile-first.** Desktop browser on localhost.
+- **Not a model zoo.** Two classifiers. Adding a third is an amendment.
 
 ## 5. Architecture boundaries
 
-**The model is fixed.** `convaiinnovations/laya-multilingual` is the only engine. It is
-non-autoregressive and has **no text-generation capability**. Nothing in this project may
-assume otherwise. Any design that needs generated prose requires a different engine and
-therefore an amendment to this contract.
+**Each classifier is a peer with its own folder.** Neither is embedded in the
+other, and neither shares a module with the other's logic.
 
-**Layers, and who owns what:**
+```
+src/classifiers/
+  config.py        paths, both model ids, the mode switch, safety allowlist
+  gpu.py           the shared VRAM budget guard
+  theme.py         palette, CSS, JS          (shared presentation only)
+  app.py           the page. formats, decides nothing
+  text/
+    engine.py      owns laya. one forward pass.
+    agent.py       composes a reply from engine values. never invents one.
+    presets.py     question sets and worked examples
+  image/
+    engine.py      owns SigLIP. one forward pass per image.
+    agent.py       composes the verdict from engine values. never invents one.
+    presets.py     accepted formats, label wording, the caveats
+```
 
-| Layer | Owns | Boundary |
-|---|---|---|
-| Engine | `laya` SDK + `laya-multilingual` weights | Single forward pass → typed answers. Never modified. |
-| Agent | Reply composition from engine values, question validation | Calls the engine, renders its returned values. **Stateless** (v1.1.0). Must not fabricate answers. |
-| Interface | Gradio page: cards 01, 02 and the example grid | Renders engine and agent output. Holds no domain logic. |
-| Data | Model weights, venv, question presets | Lives inside the project directory. |
+**The agent rule, for both, unchanged since 1.0.0:** an agent layer may derive
+questions from an input, call its engine, and compose the engine's returned values
+into a reply. It may **not** invent a probability, override a verdict it dislikes,
+or produce an answer for an input the engine could not read. This is enforced
+structurally — every number in a reply is read out of the engine's result dict —
+and asserted in `tests/test_agent.py`.
 
-**The agent layer may only:** derive structured questions from a message, call the
-engine, and compose the engine's returned values into a reply. **It may not:** invent
-probabilities, override an answer it dislikes, or fabricate an answer when the engine
-returns none. That rule is enforced structurally — every number printed in a reply is
-read out of the engine's result dict, and `tests/test_agent.py` asserts it.
+**Neither engine is modified.** They are upstream models behind a boundary.
 
-**No conversation state.** Contract v1.1.0 removed the chat interface at Mventor's
-direction, so the agent is a pure function of (message, questions) → reply. There is no
-transcript, no history, no multi-turn memory.
+**The mode switch (`CLASSIFIERS`)** decides which tabs exist:
 
-**Hardware boundary (measured, not assumed):**
+| Mode | Decide | Batch | Image | Models loaded |
+|---|---|---|---|---|
+| `text` | yes | yes | no | laya only |
+| `image` | no | no | yes | SigLIP only |
+| `both` | yes | yes | yes | both, with the VRAM guard active |
 
-| Constraint | Value | Consequence |
-|---|---|---|
-| VRAM | 2148 MB of 3072 MB for one checkpoint | One engine resident. Never preload a second. |
-| Interactive latency | 80–95 ms | Budget is 200 ms. |
-| Max sequence | 1024 tokens interactive, 2048 batch | 8192 exhausts VRAM. |
-| `max_len` is per question | 2 questions at 8192 = 16384 tokens | Multi-question calls scale memory. |
-| Threads | 6 physical cores | Cap torch to 6, not 12. |
+`start.ps1` asks the question. A hidden tab cannot be reached, so its model is
+never loaded.
 
-## 6. Data and operational constraints
+**The VRAM guard** (`gpu.py`) is the safety net for `both`. Before a text call
+needing 700 MB free (900 MB for a batch), the image model is unloaded — it
+reloads in ~3.5 s against the text model's ~21 s, so the text model is the one
+that stays. The text model yielding would be the wrong trade.
 
-- **Local only.** Bind `127.0.0.1`. `share=False`. Never `0.0.0.0`. These apps have no
-  authentication and would be open to the whole network.
-- **No secrets in the repo.** No API keys, no tokens, no `.env` committed.
-- **Weights are not committed.** The self-contained requirement is about the *directory*,
-  not the git history. Multi-gigabyte binaries are gitignored; reproducibility is a
-  lockfile plus a documented fetch step.
-- **Offline after first fetch.** Once weights are cached, the app runs with no network.
-- **n8n integration is optional**, via HTTP against the local API on `127.0.0.1`, not
-  by embedding n8n logic in the app.
+## 6. Data, safety and operational constraints
+
+- **Local only.** Bind `127.0.0.1`. `share=False`. Never `0.0.0.0`. No auth, so
+  it must never be exposed.
+- **No pickle, ever.** The image model's repository contains `training_args.bin`,
+  which the Hub flags as unsafe: unpickling executes arbitrary code, and inference
+  does not need it. It is fetched with a three-file **allowlist**
+  (`config.json`, `preprocessor_config.json`, `model.safetensors`) rather than a
+  blocklist, so a `.bin` added upstream later cannot slip in. Asserted by
+  `test_image_weights_use_an_allowlist_not_a_blocklist`.
+- **No secrets in the repository.**
+- **Weights are not committed.** The 647 MB and 363 MB checkpoints are
+  gitignored; `installer.ps1` and `tools/fetch_models.py` fetch them, and report
+  a model that is already present instead of re-downloading it.
+- **Offline after first fetch.**
+- **No bundled third-party photographs.** See §8, D1.
 
 ## 7. Acceptance gates
 
-The project is done when all of these are observably true:
-
-1. `START` from a cold start, with no console typing, opens a working page in a browser.
-2. A pasted Arabic message returns the correct routing decision **and** correct
-   probabilities, in under 200 ms, on the GPU.
-3. At least three languages in one batch produce individually correct decisions.
-4. All questions in a single call are answered in that single call.
-5. `127.0.0.1` is confirmed as the only bound address; the app is unreachable from the LAN.
-6. No Python, CUDA, or laya version is hard-coded anywhere in the source; all are pinned
-   in a lockfile.
-7. A clean `git status` on a fresh clone plus one documented setup command reproduces
-   the environment.
-8. The measured latency, VRAM and RAM figures are recorded in `PROJECT_STATE.md` and
-   match a re-run.
-9. Every text colour meets **WCAG 2.1 AA** contrast (4.5:1 body, 3:1 large and
-   non-text indicators) in **both** light and dark mode, proven by
-   `tools/contrast.py` rather than asserted.
+1. `installer.ps1` completes on a machine with no `.venv` and no `.data`, and
+   reports both models present on a second run.
+2. The text classifier answers an Arabic message correctly, under 200 ms.
+3. Three languages batched in one call, all correct.
+4. All questions answered in one forward pass.
+5. Bound to `127.0.0.1` only.
+6. No Python / CUDA / package version hard-coded in `src/`.
+7. Lockfile plus one documented setup command.
+8. Measured latency, VRAM and RAM recorded in `PROJECT_STATE.md`.
+9. Every text colour meets **WCAG 2.1 AA** in **both** themes, proven by
+   `tools/contrast.py`.
+10. **Each mode shows only its own tabs**, proven by test.
+11. **The image classifier returns a label for a real image**, and reports a
+    readable error — not a verdict — for a file that is not an image.
+12. **No `.bin` reaches `.data/`**, verified on disk after a real fetch.
 
 ## 8. Risks and known unknowns
 
 | Risk | Status |
 |---|---|
-| Model is over-confident; ECE 0.314 as shipped | **Accepted.** Calibration needs labelled data that does not exist yet. Documented, not fixed. |
-| Arabic macro accuracy 0.400 on 20-way intent | **Accepted.** In-scope use is 3–8 buckets. |
+| **The image model is reported overfit by its own author.** The card claims 99.2% test accuracy and then says "Some users reported overfitting issues". It returned 99.5% on a synthetic gradient, which is not evidence of anything. | **Unresolved. The caveat is shown in the UI.** No accuracy claim is made anywhere. |
+| Both models resident peak at 2988 of 3072 MB | **Mitigated** by the mode switch; guarded in `both`. |
+| CUDA 13 removed Pascal, so a torch upgrade can drop `sm_61` | cu126 pinned. Re-verify `get_arch_list()` after any bump. |
+| laya is over-confident, ECE 0.314 as shipped | **Accepted.** Calibration needs labelled data that does not exist. |
+| laya Arabic macro accuracy 0.400 on 20-way intent | **Accepted.** Good for 3–8 buckets. |
 | `score` questions have measured position bias | **Banned for non-English.** Use `choice`. |
-| `noul` can under-report "true" | Documented. Cross-check with a 2-option `choice`. |
-| GPU driver or CUDA update could drop Pascal | cu126 pinned. CUDA 13 removed sm_61. Re-verification needed after any torch bump. |
-| venv inside a repo is unconventional | Accepted deliberately: self-containment was the requirement. Mitigated by gitignore. |
+| **D1 — no third-party test images are bundled.** | **OPEN, needs Mventor.** See below. |
+| No `classification` on the text path has been evaluated on real data | The worked examples are a smoke test, not an evaluation. |
+
+### D1 — test images, and why nothing is bundled
+
+The request was to use Unsplash photographs as test data. Not done, deliberately:
+
+- The Unsplash API needs an access key, and its terms govern bulk downloading.
+- Committing third-party photographs into a **public** repository raises
+  attribution and licensing questions that a code licence does not answer.
+
+What exists instead: the attach button accepts any image the user has, the
+classifier is proven end to end on generated images, and the app needs no bundled
+data to be useful. Mventor chooses the source for a bundled sample set.
 
 ## 9. Open decisions
 
-**D1. What does "real chat agent" mean here? — RESOLVED 2026-09-27, narrowed by v1.1.0.**
-`laya-multilingual` cannot generate text. Decision: **a rule-based agent, no new
-dependencies.** The agent validates the question set, calls the engine, and composes
-its reply from the engine's returned values. It is a conversational interface over a
-classifier, and the contract says so plainly rather than implying generation. No LLM
-runtime is added. A generator, if ever wanted, is a separate engine and therefore an
-amendment to §5. **v1.1.0 removed the chat interface entirely** at Mventor's direction
-("no full chat"), so the agent holds no conversation state.
-
-**D2. Git identity — RESOLVED 2026-09-27.** Global git config on this machine is empty
-and stays that way. A **repository-local** identity was set for `laya-beta-chat` only:
-`Mventor <mventor@localhost>`. This repo is local and never pushed, so the address is a
-placeholder. Change it with `git config user.email "..."` from inside the repo.
-
-**D3. Port — RESOLVED 2026-09-27.** Chat interface on `127.0.0.1:7860`, HTTP API on
-`127.0.0.1:8000`. Neither collides with n8n on `:8888`.
+**D1 — where do bundled test images come from?** Options: a permissively licensed
+dataset fetched on demand; the model authors' own example images; or nothing
+bundled and the user supplies their own. **Mventor's call. Not blocking.**
 
 ## 10. Amendment history
 
 | Version | Date | Change | Approved by |
 |---|---|---|---|
-| 0.1.0 | 2026-09-27 | Initial draft. New project. | Mventor |
-| 0.1.0 | 2026-09-27 | D1 resolved: rule-based agent, no new dependencies. | Mventor |
-| 1.0.0 | 2026-09-27 | D2 resolved: repo-local identity. D3 resolved: ports 7860/8000. Contract activated. | Mventor |
-| 1.2.0 | 2026-09-27 | Dark mode added as a second designed palette with a header toggle. Acceptance gate 9 added: WCAG AA contrast proven in both modes. Contrast audit found and fixed `--ink-faint` at 3.35:1 (failing). | Mventor |
-| 1.1.0 | 2026-09-27 | Project renamed `laya-beta-chat` → `laya-beta-test`. Full chat interface removed (§5, D1): the agent is now a stateless reply composer. Interface is cards 01/02 plus a grid of example cards. | Mventor |
-
+| 0.1.0 | 2026-09-27 | Initial draft, as `laya-beta-chat`. | Mventor |
+| 0.1.0 | 2026-09-27 | D1: rule-based agent, no LLM runtime. | Mventor |
+| 1.0.0 | 2026-09-27 | D2 repo-local identity, D3 ports. Activated. | Mventor |
+| 1.1.0 | 2026-09-27 | Renamed `laya-beta-chat` → `laya-beta-test`. Chat removed; stateless agent. | Mventor |
+| 1.2.0 | 2026-09-27 | Dark mode as a second palette; gate 9, WCAG AA. | Mventor |
+| **2.0.0** | 2026-09-27 | **Second classifier added: SigLIP AI-vs-human image detector, with an attach button accepting all common image formats. Startup now asks which classifier to load. Package restructured to two peer classifiers, `classifiers/text/` and `classifiers/image/`. Image weights fetched with a three-file allowlist so the unsafe pickle is never downloaded. Gates 10–12 added. Repo renamed to `mventor-git/classifiers-test`.** | Mventor |

@@ -137,8 +137,8 @@ def main():
     os.environ["LAYA_DEVICE"] = "cuda"
     os.environ["LAYA_THREADS"] = "6"
 
-    from laya_chat import engine  # noqa: E402
-    from laya_chat.app import build  # noqa: E402
+    from classifiers import engine  # noqa: E402
+    from classifiers.app import build  # noqa: E402
     import gradio as gr  # noqa: E402
 
     print("warming the model up (needed for the result shots)...")

@@ -32,7 +32,7 @@ with socket.socket() as s:
     s.bind(("127.0.0.1", 0))
     port = s.getsockname()[1]
 
-from laya_chat.app import build  # noqa: E402
+from classifiers.app import build  # noqa: E402
 
 demo = build()
 box = {}
@@ -70,13 +70,15 @@ args = (f'--headless=new --disable-gpu --no-first-run --no-default-browser-check
 
 ok = False
 for attempt in (1, 2):
-    psi = subprocess.STARTUPINFO() if hasattr(subprocess, "STARTUPINFO") else None
-    proc = subprocess.Popen(f'"{BRAVE}" {args}', shell=True,
-                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    # No shell=True: with a shell, proc.kill() kills cmd.exe and leaves the
+    # browser alive holding the profile lock, which is what wedged this tool.
+    proc = subprocess.Popen([BRAVE] + args.split(), stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL)
     try:
         proc.wait(timeout=KILL_AFTER)
     except subprocess.TimeoutExpired:
-        proc.kill()
+        subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+                       capture_output=True)
         try:
             proc.wait(timeout=5000)
         except subprocess.TimeoutExpired:
@@ -85,7 +87,7 @@ for attempt in (1, 2):
         ok = True
         break
     print(f"  attempt {attempt}: browser overstayed {KILL_AFTER/1000:.0f}s, killed")
-    time.sleep(3)
+    time.sleep(4)
 
 for stray in PROFILE.glob("Singleton*"):
     stray.unlink(missing_ok=True)

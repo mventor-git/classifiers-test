@@ -14,7 +14,7 @@ import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
-CSS = (REPO / "src" / "laya_chat" / "app.py").read_text(encoding="utf-8")
+CSS = (REPO / "src" / "classifiers" / "app.py").read_text(encoding="utf-8")
 
 # Which surface each text token is read against.
 ON_SURFACE = ["--ink", "--ink-soft", "--ink-faint", "--good", "--bad"]

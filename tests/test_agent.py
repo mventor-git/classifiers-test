@@ -14,7 +14,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 import pytest  # noqa: E402
 
-from laya_chat import agent, presets  # noqa: E402
+from classifiers.text import agent, presets  # noqa: E402
+from classifiers.image import agent as image_agent  # noqa: E402
+from classifiers.image import presets as image_presets  # noqa: E402
+from classifiers import config  # noqa: E402
 
 
 # ---------------------------------------------------------------- validation
@@ -167,3 +170,107 @@ def test_every_example_key_exists_in_its_preset():
 def test_presets_are_json_serialisable():
     json.dumps(presets.PRESETS)
     json.dumps(presets.EXAMPLES)
+
+
+# ================================================================= image agent
+# Same no-fabrication rule as the text agent (contract section 5): the image
+# agent renders engine values and never invents a verdict.
+def _good(name="a.png", label="ai", conf=0.9, **kw):
+    d = {"ok": True, "name": name, "label": label, "confidence": conf,
+         "probabilities": {"ai": conf if label == "ai" else 1 - conf,
+                           "hum": 1 - conf if label == "ai" else conf},
+         "detail": "224x224 input", "size": "900x600"}
+    d.update(kw)
+    return d
+
+
+def test_image_agent_empty_says_so():
+    md, meta, rows = image_agent.compose([])
+    assert rows == [] and meta == ""
+    assert "Classify" in md
+
+
+def test_image_agent_renders_the_engine_label():
+    md, meta, rows = image_agent.compose([_good(label="ai", conf=0.93)])
+    assert "AI-generated" in md
+    assert "93.0%" in md
+    assert meta == "1 of 1 readable · 1 ai · 0 hum"
+    assert rows == [["a.png", "900x600", "ai", "93.0%"]]
+
+
+def test_image_agent_flags_low_confidence():
+    md, _, _ = image_agent.compose([_good(label="hum", conf=0.42)])
+    assert "uncertain" in md.lower()
+
+
+def test_image_agent_does_not_invent_a_verdict_for_a_bad_file():
+    md, meta, rows = image_agent.compose([
+        _good(), {"ok": False, "name": "bad.bin", "error": "UnidentifiedImageError"}])
+    assert "not classified" in md
+    assert rows == [["a.png", "900x600", "ai", "90.0%"]]   # only the good one
+    assert meta == "1 of 2 readable · 1 ai · 0 hum"
+
+
+def test_image_agent_all_bad_is_not_a_verdict():
+    md, meta, rows = image_agent.compose([
+        {"ok": False, "name": "a.bin", "error": "boom"},
+        {"ok": False, "name": "b.bin", "error": "boom"}])
+    assert "None of those" in md
+    assert rows == []
+    assert "%" not in md                 # no confidence invented
+
+
+def test_image_agent_carries_the_overfitting_caveat():
+    md, _, _ = image_agent.compose([_good()])
+    assert "overfit" in md.lower()
+
+
+def test_image_presets_cover_common_formats():
+    for ext in (".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif", ".tiff"):
+        assert ext in image_presets.IMAGE_EXTS
+
+
+def test_image_presets_label_every_model_label():
+    for idx, label in config.IMAGE_LABELS.items():
+        assert label in image_presets.LABEL_TEXT
+
+
+# ================================================================== mode logic
+@pytest.mark.parametrize("mode,want_text,want_image", [
+    ("text", True, False),
+    ("image", False, True),
+    ("both", True, True),
+])
+def test_mode_enables_the_right_tabs(monkeypatch, mode, want_text, want_image):
+    monkeypatch.setenv("CLASSIFIERS", mode)
+    import importlib
+    fresh = importlib.reload(config)
+    assert fresh.APP_MODE == mode
+    assert fresh.WANT_TEXT is want_text
+    assert fresh.WANT_IMAGE is want_image
+    monkeypatch.setenv("CLASSIFIERS", "text")
+    importlib.reload(config)
+
+
+def test_unknown_mode_falls_back_to_text(monkeypatch):
+    monkeypatch.setenv("CLASSIFIERS", "nonsense")
+    import importlib
+    fresh = importlib.reload(config)
+    assert fresh.APP_MODE == "text"
+    monkeypatch.setenv("CLASSIFIERS", "text")
+    importlib.reload(config)
+
+
+# ==================================================================== safety
+def test_image_weights_use_an_allowlist_not_a_blocklist():
+    assert config.IMAGE_ALLOW_PATTERNS == [
+        "config.json", "preprocessor_config.json", "model.safetensors"]
+    # Nothing that could be a pickle is on the list.
+    assert not any(p.endswith((".bin", ".pt", ".pth", ".ckpt", ".pkl"))
+                   for p in config.IMAGE_ALLOW_PATTERNS)
+
+
+def test_vram_budget_is_documented_in_gpu():
+    from classifiers import gpu
+    assert gpu.TEXT_HEADROOM_MB > 0
+    assert gpu.BATCH_HEADROOM_MB >= gpu.TEXT_HEADROOM_MB
