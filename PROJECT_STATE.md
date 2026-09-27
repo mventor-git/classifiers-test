@@ -185,3 +185,34 @@ cannot slip in. Verified on disk: 363 MB, three files, zero pickles. Gate 12.
   no data sent. Worth stating plainly.
 - Dark mode is not supported by dark **mode** detection beyond the explicit
   toggle; there is no `prefers-color-scheme` in the packaged app's own test.
+
+## Clean-machine install, verified 2026-09-27
+
+Cloned to a bare folder with no `.venv` and no `.data`, then ran
+`installer.ps1` exactly as a new user would.
+
+| | |
+|---|---|
+| Fresh clone | `e51a4f4`, 15 files, no `.venv`, no `.data` |
+| **First run** | **8.7 min** — venv, torch 2.14.0+cu126, torchvision, 65 pinned packages, both models downloaded (text 305 s, image 107 s), environment verified |
+| **Second run** | **35.2 s** — `torch already installed`, 65 packages already satisfied, both models reported `ALREADY INSTALLED - not downloading again` |
+| Tests from that clone | **64 passed** |
+| Gates from that clone | **12/12** |
+| A real Unsplash photo fetched and classified from that clone | `hum` at 100.0% |
+| URL guard from that clone | still refuses `http://`, `127.0.0.1` and `169.254.169.254` |
+
+### The bug this found
+
+The first attempt **died after 6 seconds**. `installer.ps1` set
+`$ErrorActionPreference = 'Stop'`, then probed for torch by running
+`python -c "import torch"`. Torch was not installed yet, so python wrote a
+traceback to stderr, PowerShell raised `NativeCommandError`, and *checking for
+a missing module killed the install*. It would have hit every new user on the
+very first step.
+
+Fixed two ways: the probe now uses `importlib.util.find_spec` and reads an exit
+code instead of parsing output, and `$ErrorActionPreference` is `Continue`,
+because every failure path in the script already checks `$LASTEXITCODE`
+explicitly — `Stop` only ever got in the way of a diagnostic line.
+
+**Acceptance gate 1 is now genuinely satisfied. It was not before this run.**
