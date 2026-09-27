@@ -1,0 +1,25 @@
+# Dependencies and weights live inside the repo folder so the project is
+# self-contained, but multi-gigabyte binaries do not belong in git history.
+# Contract section 6: reproducibility comes from the lockfile, not the blobs.
+
+.venv/
+.data/
+
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# Secrets must never enter the repo. Contract section 6.
+.env
+*.key
+*.pem
+secrets.*
+
+# Editor and OS noise
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
+*.log
