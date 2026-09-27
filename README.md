@@ -5,29 +5,73 @@ should handle it, is a refund being requested, what does the sender actually wan
 with probabilities, in about 90 ms, on your own graphics card. Nothing leaves the
 machine.
 
-**It does not write replies.** `laya-multilingual` is a classifier, not a language
-model. Every value on screen was returned by the model. Read
-[`contract.md`](contract.md) before changing anything.
+**It does not write replies.** [`laya-multilingual`](https://huggingface.co/convaiinnovations/laya-multilingual)
+is a classifier, not a language model. Every value on screen was returned by the
+model. Read [`contract.md`](contract.md) before changing anything.
 
 ---
 
-## Start it
+## Screenshots
+
+### Light mode
+
+![The Laya app in light mode: card 01 on the left holds the question and the Decide button, card 02 on the right is where the answer lands, and a grid of example cards sits underneath](docs/screenshots/light.png)
+
+*The default theme: warm cream page, white cards, the signature clay-orange
+accents. **Card 01** (left) takes the message and holds the **Decide** button in its
+header. **Card 02** (right) is where the model's answers land. Below both, a grid of
+**example cards** — each one loads its message into card 01 with a single click.*
+
+### Dark mode
+
+![The same Laya app in dark mode: charcoal surfaces, cream text, the same clay-orange accents on the 01, 02 and 03 badges](docs/screenshots/dark.png)
+
+*Dark mode is a second designed palette, not an inversion. The accent moves to a
+lighter clay so it stays visible against charcoal, and labels become cream on
+near-black. Toggle it with the button in the top right; the choice is remembered.*
+
+---
+
+## Try it
 
 ```powershell
+git clone https://github.com/mventor-git/laya-beta-test
+cd laya-beta-test
+powershell -ExecutionPolicy Bypass -File installer.ps1
 powershell -ExecutionPolicy Bypass -File start.ps1
 ```
 
-Or double-click `start.ps1` and choose "Run with PowerShell" if prompted.
+`installer.ps1` does everything: it detects whether you have an NVIDIA GPU,
+creates a Python 3.12 environment, installs the right PyTorch build, installs the
+pinned dependencies, downloads the ~647 MB of model weights, and verifies the
+result. Then `start.ps1` serves the app and opens your browser.
 
-The browser opens by itself once the server is up. The first start takes about 20
-seconds while the model loads onto the GPU; after that it is instant. Stop it with
-`stop.ps1`, or close the window.
+No API key. No account. No cloud call. Nothing is uploaded.
 
-First-time setup on a fresh clone:
+<details>
+<summary>Already have the environment? What each piece does</summary>
 
-```powershell
-.\setup.cmd
-```
+| Step | What happens |
+|---|---|
+| device detection | NVIDIA present → CUDA build, otherwise CPU |
+| PyTorch | from the **cu126** index on a GPU, plain PyPI on CPU |
+| dependencies | `requirements.lock.txt`, 61 pinned packages |
+| weights | `snapshot_download` of `convaiinnovations/laya-multilingual` into `.data/huggingface` |
+| verify | prints torch / laya / gradio versions, CUDA status, free VRAM |
+
+Force a specific device with `installer.ps1 -Device cpu`, or skip the download with
+`-SkipWeights` if you want to fetch it yourself.
+</details>
+
+### Why the weights are not in this repository
+
+The checkpoint is 647 MB of binaries. Committing it would put 647 MB in git history
+forever, where it can never be garbage-collected and every clone pays for it.
+`.gitignore` excludes `.data/` and `.venv/`; `installer.ps1` fetches the weights
+instead. That is the difference between "self-contained" and "a repository nobody
+wants to clone".
+
+---
 
 ## The page
 
@@ -79,21 +123,20 @@ internet. There is no authentication, so **do not** change the host to `0.0.0.0`
 
 ## Appearance
 
-**Dark mode** — press the button in the header, or just let it follow Windows. Your
-choice is remembered. Two designed palettes, not one inverted: dark is warm charcoal
-with a lighter copper accent, because an accent that reads on cream disappears on
-charcoal.
+**Dark mode** — press the button in the header, or let it follow your OS. Your
+choice is remembered.
 
 Every text colour in both modes is checked against WCAG AA by
-`tools/contrast.py` — currently **14/14 pass**, worst case 4.93:1 against a 4.5:1
-bar. That audit found a real one: the faint grey used for placeholders and answer
-footnotes was 3.35:1 and failing. It is fixed.
+`tools/contrast.py` — currently **20/20 pass**, worst case 4.53:1 against a 4.5:1
+bar. That audit has already caught two real regressions: a faint grey at 3.35:1 on
+placeholders, and a hover border at 1.51:1.
 
 ## Layout
 
 ```
+installer.ps1             one-command setup for a new machine
 start.ps1 / stop.ps1      run and stop
-setup.cmd                 one-time environment install
+setup.cmd                 the same install, for people who double-click
 contract.md               the constitution: vision, boundaries, acceptance gates
 PROJECT_STATE.md          measured figures, gate results, what is not verified
 requirements.lock.txt     61 pinned packages
@@ -102,11 +145,13 @@ src/laya_chat/
   agent.py                composes a reply from engine values. never invents one.
   presets.py              question sets and worked examples
   config.py               paths, device, ports, limits. no version numbers.
-  app.py                  the Gradio page. formats only, decides nothing.
+  app.py                  the Gradio page and the theme. formats only.
 tests/test_agent.py       26 tests, including "never invents a value"
 tools/acceptance.py       runs the 9 contract gates
 tools/contrast.py         WCAG audit of both palettes
-.venv/  .data/            inside the repo, gitignored
+tools/snapshot.py         headless screenshots of both themes
+docs/screenshots/         the images used in this README
+.venv/  .data/            created by the installer, gitignored
 ```
 
 ## Verify it
@@ -119,8 +164,15 @@ tools/contrast.py         WCAG audit of both palettes
 
 ## Hardware note
 
-This was built for a **GTX 1060 (sm_61, Pascal)**. `setup.cmd` installs torch from
-the `cu126` index on purpose: CUDA 13.0 removed Pascal, and `cu128`/`cu129` no longer
-ship a current torch that runs on this card. A plain `pip install torch` gives a
-**CPU-only** build on Windows and you will lose the GPU. See the header of
-`requirements.lock.txt`.
+Built and measured on an **RTX-free GTX 1060 (sm_61, Pascal)** with 16 GB of RAM.
+`installer.ps1` installs PyTorch from the `cu126` index on purpose: CUDA 13.0
+removed Pascal, and `cu128`/`cu129` no longer ship a current torch that runs on that
+card. A plain `pip install torch` on Windows silently gives you a **CPU-only** build
+and you lose the GPU. Roughly 90 ms per decision with the GPU, 1–3 s without.
+
+## Licence and model terms
+
+This project is Apache-2.0. The model,
+[`convaiinnovations/laya-multilingual`](https://huggingface.co/convaiinnovations/laya-multilingual),
+is Apache-2.0 and carries a commercial-use tag. It is downloaded at install time and
+is not redistributed here.

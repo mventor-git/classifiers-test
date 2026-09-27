@@ -1,4 +1,4 @@
-"""Interface layer.
+﻿"""Interface layer.
 
 Contract section 5: renders engine and agent output, holds no domain logic. Every
 value shown here came from the engine via agent.py; this file formats and displays.
@@ -25,224 +25,255 @@ import gradio as gr  # noqa: E402
 
 CARD_CSS = """
 /* ==========================================================================
-   PALETTE
-   Light and dark are two designed palettes, not one inverted.
-   Every text/background pair below is asserted in tools/contrast.py against
-   WCAG AA (4.5:1 body, 3:1 large). Light --ink-faint was #9a8a76 at 3.35:1
-   and FAILED; it is #7d6e5c at 4.93:1 now.
+   THEME - Anthropic / Claude visual language
+   Two designed palettes, and the token set is mapped onto Gradio's OWN css
+   variables so every built-in component follows. Overriding the variables
+   rather than individual selectors is what makes the whole app consistent;
+   the earlier version fought selectors one at a time and lost, which is why
+   Gradio's default blue label pills were still showing.
+
+   Every text/background pair is asserted in tools/contrast.py (WCAG AA).
    ========================================================================== */
 :root {
-    --page-a:      #fbf8f3;
-    --page-b:      #f3ebe0;
+    --page:        #f5f4ed;   /* the cream Claude sits on */
     --surface:     #ffffff;
-    --surface-2:   #fdfaf6;
-    --line:        #e8dfd1;
-    --line-hi:     #dccfb9;
-    --ink:         #2b2119;   /* 15.7:1 on surface */
-    --ink-soft:    #6b5b49;   /*  6.5:1 */
-    --ink-faint:   #7d6e5c;   /*  4.9:1  (was 3.35:1 - failed AA) */
-    --copper:      #a85a1c;   /*  5.1:1 with white text */
-    --copper-dk:   #8a4410;
-    --teal:        #0f6f66;   /*  6.0:1 */
-    --good:        #2f7d4f;   /*  5.0:1 */
-    --bad:         #b3402e;   /*  5.7:1 */
-    --shadow:      0 1px 2px rgba(43,33,25,.05), 0 6px 18px rgba(43,33,25,.06);
-    --shadow-hi:   0 2px 4px rgba(43,33,25,.07), 0 14px 34px rgba(43,33,25,.11);
-    --ring:        rgba(168,90,28,.45);
-    --radius:      16px;
+    --surface-2:   #faf9f5;
+    --line:        #e3e1d9;
+    --line-hi:     #8f8b81;
+    --ink:         #1f1e1d;
+    --ink-soft:    #5c5b57;
+    --ink-faint:   #6e6d67;
+    --clay:        #d97757;   /* the signature Claude orange */
+    --clay-dk:     #b85c3e;   /* passes AA with white text */
+    --clay-soft:   #f6e6de;
+    --good:        #2f7d4f;
+    --bad:         #b3402e;
+    --shadow:      0 1px 2px rgba(31,30,29,.04), 0 4px 14px rgba(31,30,29,.05);
+    --shadow-hi:   0 2px 4px rgba(31,30,29,.06), 0 12px 30px rgba(31,30,29,.09);
+    --ring:        rgba(217,119,87,.45);
+    --radius:      14px;
+
+    /* ---- map onto Gradio's variables ---- */
+    --body-background-fill:        var(--page);
+    --body-text-color:             var(--ink);
+    --body-text-color-subdued:     var(--ink-soft);
+    --block-background-fill:       var(--surface);
+    --block-background-fill-soft:  var(--surface-2);
+    --block-border-color:          var(--line);
+    --block-border-width:          1px;
+    --block-radius:                10px;
+    --block-title-text-color:      var(--ink);
+    --block-title-background-fill: transparent;
+    --block-info-text-color:       var(--ink-soft);
+    --block-info-background-fill:  var(--surface-2);
+    --block-info-border-color:     var(--line);
+    /* the blue pills: Claude labels are plain small muted text, no chip */
+    --block-label-background-fill:     transparent;
+    --block-label-background-fill-hover: transparent;
+    --block-label-border-color:        transparent;
+    --block-label-text-color:          var(--ink-soft);
+    --block-label-padding:             2px 0 6px 0;
+    --block-label-margin:              0;
+    --block-label-radius:              0;
+    --border-color-primary:        var(--line);
+    --border-color-accent:        var(--clay);
+    --border-color-accent-subdued: var(--clay-soft);
+    --color-accent:                var(--clay);
+    --color-accent-soft:           var(--clay-soft);
+    --input-background-fill:         var(--surface-2);
+    --input-background-fill-focus:   var(--surface);
+    --input-background-fill-hover:   var(--surface-2);
+    --input-border-color:            var(--line);
+    --input-border-color-focus:      var(--clay);
+    --checkbox-background-fill:      var(--surface-2);
+    --checkbox-background-fill-selected: var(--clay);
+    --table-even-background-fill:    var(--surface-2);
+    --table-odd-background-fill:     var(--surface);
+    --slider-color:                  var(--clay);
+    --button-primary-background-fill:       #1f1e1d;
+    --button-primary-background-fill-hover: #000000;
+    --button-primary-text-color:            #f5f4ed;
+    --button-primary-border-color:          #1f1e1d;
+    --button-cancel-background-fill:        var(--surface-2);
+    --button-cancel-background-fill-hover:  var(--line-hi);
+    --button-cancel-text-color:             var(--ink);
+    --button-cancel-border-color:           var(--line);
+    --button-secondary-background-fill:     var(--surface-2);
+    --button-secondary-text-color:          var(--ink);
+    --button-secondary-border-color:        var(--line);
 }
 
-/* Dark rules come after :root so they win on equal specificity.
-   html[data-theme="dark"] is an explicit user choice and beats the media query. */
 html[data-theme="dark"] {
-    --page-a:      #14110e;
-    --page-b:      #0d0b0a;
-    --surface:     #211c18;
-    --surface-2:   #2a2420;
-    --line:        #3a322b;
-    --line-hi:     #4d4239;
-    --ink:         #f4eee6;   /* 14.6:1 on surface */
-    --ink-soft:    #c9bcae;   /*  9.1:1 */
-    --ink-faint:   #a89a8c;   /*  6.2:1 */
-    --copper:      #e8964f;   /*  7.1:1 */
-    --copper-dk:   #d07f3a;
-    --teal:        #5ecfbe;   /*  9.0:1 */
+    --page:        #1f1e1d;
+    --surface:     #262624;
+    --surface-2:   #30302e;
+    --line:        #3e3e3c;
+    --line-hi:     #78776f;
+    --ink:         #f5f4ed;
+    --ink-soft:    #c2c2c0;
+    --ink-faint:   #94938e;
+    --clay:        #e08a6a;
+    --clay-dk:     #c97659;
+    --clay-soft:   #3a2b25;
     --good:        #6fcf97;
     --bad:         #f08a7d;
-    --shadow:      0 1px 2px rgba(0,0,0,.4), 0 6px 18px rgba(0,0,0,.45);
-    --shadow-hi:   0 2px 4px rgba(0,0,0,.5), 0 14px 34px rgba(0,0,0,.55);
-    --ring:        rgba(232,150,79,.55);
+    --shadow:      0 1px 2px rgba(0,0,0,.35), 0 4px 14px rgba(0,0,0,.4);
+    --shadow-hi:   0 2px 4px rgba(0,0,0,.45), 0 12px 30px rgba(0,0,0,.5);
+    --ring:        rgba(224,138,106,.5);
+    --button-primary-background-fill:       #f5f4ed;
+    --button-primary-background-fill-hover: #ffffff;
+    --button-primary-text-color:            #1f1e1d;
+    --button-primary-border-color:          #f5f4ed;
     color-scheme: dark;
 }
+
 @media (prefers-color-scheme: dark) {
     html:not([data-theme="light"]) {
-        --page-a:      #14110e;
-        --page-b:      #0d0b0a;
-        --surface:     #211c18;
-        --surface-2:   #2a2420;
-        --line:        #3a322b;
-        --line-hi:     #4d4239;
-        --ink:         #f4eee6;
-        --ink-soft:    #c9bcae;
-        --ink-faint:   #a89a8c;
-        --copper:      #e8964f;
-        --copper-dk:   #d07f3a;
-        --teal:        #5ecfbe;
+        --page:        #1f1e1d;
+        --surface:     #262624;
+        --surface-2:   #30302e;
+        --line:        #3e3e3c;
+        --line-hi:     #78776f;
+        --ink:         #f5f4ed;
+        --ink-soft:    #c2c2c0;
+        --ink-faint:   #94938e;
+        --clay:        #e08a6a;
+        --clay-dk:     #c97659;
+        --clay-soft:   #3a2b25;
         --good:        #6fcf97;
         --bad:         #f08a7d;
-        --shadow:      0 1px 2px rgba(0,0,0,.4), 0 6px 18px rgba(0,0,0,.45);
-        --shadow-hi:   0 2px 4px rgba(0,0,0,.5), 0 14px 34px rgba(0,0,0,.55);
-        --ring:        rgba(232,150,79,.55);
+        --shadow:      0 1px 2px rgba(0,0,0,.35), 0 4px 14px rgba(0,0,0,.4);
+        --shadow-hi:   0 2px 4px rgba(0,0,0,.45), 0 12px 30px rgba(0,0,0,.5);
+        --ring:        rgba(224,138,106,.5);
+        --button-primary-background-fill:       #f5f4ed;
+        --button-primary-background-fill-hover: #ffffff;
+        --button-primary-text-color:            #1f1e1d;
+        --button-primary-border-color:          #f5f4ed;
         color-scheme: dark;
     }
 }
 
 /* ---- page ---- */
-body {
-    background:
-        radial-gradient(1100px 520px at 12% -8%, rgba(255,246,233,.9) 0%, transparent 60%),
-        radial-gradient(900px 460px at 88% 4%, rgba(238,246,244,.9) 0%, transparent 55%),
-        linear-gradient(180deg, var(--page-a) 0%, var(--page-b) 100%) !important;
-    background-attachment: fixed !important;
+html, body {
+    background: var(--page) !important;
     color: var(--ink) !important;
     font-family: "Segoe UI", system-ui, -apple-system, "Noto Sans Arabic",
                  "Noto Sans", "Helvetica Neue", sans-serif !important;
+    -webkit-font-smoothing: antialiased;
 }
-html[data-theme="dark"] body,
-html:not([data-theme="light"]) body { transition: background-color .3s ease; }
-@media (prefers-color-scheme: dark) {
-    html:not([data-theme="light"]) body {
-        background:
-            radial-gradient(1100px 520px at 12% -8%, rgba(60,44,28,.55) 0%, transparent 60%),
-            radial-gradient(900px 460px at 88% 4%, rgba(24,54,52,.5) 0%, transparent 55%),
-            linear-gradient(180deg, var(--page-a) 0%, var(--page-b) 100%) !important;
-    }
-}
-h1 { font-weight: 800 !important; letter-spacing: -0.02em !important;
-     color: var(--ink) !important; }
-h1 + p, .prose p { color: var(--ink-soft) !important; }
-code, pre { border-radius: 8px !important; }
+h1 { font-weight: 650 !important; letter-spacing: -0.015em !important;
+     color: var(--ink) !important; font-size: 1.6rem !important; }
+h1 + p { color: var(--ink-soft) !important; font-size: .95rem !important;
+         line-height: 1.6 !important; max-width: 62ch; }
 footer, .gradio-container footer { display: none !important; }
+
+/* ---- tabs: quiet, Claude-style underline ---- */
+.tabs > .tab-nav { border-bottom: 1px solid var(--line) !important; gap: 4px !important; }
+.tabs > .tab-nav button {
+    font-weight: 550 !important; font-size: .9rem !important;
+    color: var(--ink-soft) !important; background: transparent !important;
+    border: none !important; padding: 10px 14px !important;
+    transition: color .2s ease !important;
+}
+.tabs > .tab-nav button:hover { color: var(--ink) !important; }
+.tabs > .tab-nav button.selected {
+    color: var(--ink) !important; background: transparent !important;
+    border: none !important; border-bottom: 2px solid var(--clay) !important;
+}
 
 /* ---- cards ---- */
 .card {
     border: 1px solid var(--line) !important;
     border-radius: var(--radius) !important;
-    padding: 20px 22px !important;
+    padding: 22px 24px !important;
     background: var(--surface) !important;
     box-shadow: var(--shadow) !important;
-    color: var(--ink) !important;
     height: 100%;
-    transition: box-shadow .28s ease, transform .28s ease, border-color .28s ease,
-                background-color .3s ease;
-    animation: cardIn .55s cubic-bezier(.2,.7,.3,1) both;
+    transition: box-shadow .3s ease, transform .3s ease, border-color .3s ease,
+                background-color .35s ease;
+    animation: cardIn .6s cubic-bezier(.2,.7,.3,1) both;
 }
 .card:hover { box-shadow: var(--shadow-hi) !important; transform: translateY(-2px);
               border-color: var(--line-hi) !important; }
 @keyframes cardIn {
-    from { opacity: 0; transform: translateY(14px) scale(.995); }
+    from { opacity: 0; transform: translateY(12px); }
     to   { opacity: 1; transform: none; }
 }
 .card-top {
     display: flex; align-items: center; gap: 12px;
-    margin-bottom: 15px; padding-bottom: 13px;
+    margin-bottom: 20px; padding-bottom: 16px;
     border-bottom: 1px solid var(--line);
 }
 .card-num {
     display: inline-flex; align-items: center; justify-content: center;
-    min-width: 32px; height: 32px; padding: 0 9px;
-    border-radius: 9px; color: #fff;
-    font-weight: 800; font-size: .78rem; letter-spacing: .08em;
-    background: linear-gradient(140deg, var(--copper) 0%, var(--copper-dk) 100%);
-    box-shadow: 0 2px 7px rgba(0,0,0,.22);
+    min-width: 30px; height: 30px; padding: 0 9px;
+    border-radius: 8px; color: #fff; background: var(--clay-dk);
+    font-weight: 700; font-size: .74rem; letter-spacing: .08em;
 }
-.card-title { font-weight: 750; font-size: 1.06rem; color: var(--ink); flex: 1;
-              letter-spacing: -0.01em; }
+html[data-theme="dark"] .card-num { color: #1f1e1d; }
+.card-title { font-weight: 620; font-size: 1rem; color: var(--ink); flex: 1;
+              letter-spacing: -0.005em; }
 
 /* ---- example cards ---- */
-.card-label { font-weight: 700; font-size: .88rem; margin-bottom: 7px; color: var(--ink); }
+.card-label { font-weight: 600; font-size: .85rem; margin-bottom: 8px; color: var(--ink); }
 .card-msg {
-    font-size: .85rem; line-height: 1.55; padding: 11px 13px; margin-bottom: 11px;
-    border-radius: 10px; background: var(--surface-2); color: var(--ink-soft);
-    min-height: 78px; max-height: 132px; overflow-y: auto;
-    border-right: 3px solid var(--copper);
-    transition: background .25s ease, border-color .25s ease;
+    font-size: .85rem; line-height: 1.65; padding: 12px 14px; margin-bottom: 12px;
+    border-radius: 8px; background: var(--surface-2); color: var(--ink-soft);
+    min-height: 82px; max-height: 140px; overflow-y: auto;
+    border-right: 2px solid var(--clay);
+    transition: border-color .25s ease, background-color .35s ease;
 }
-.card:hover .card-msg { border-right-color: var(--teal); }
-.card-expect { font-size: .78rem; color: var(--teal); margin-bottom: 11px;
-               font-weight: 650; }
+.card-expect { font-size: .78rem; color: var(--ink-soft); margin-bottom: 12px;
+               font-weight: 550; }
 
-/* ---- answer panel: fades in on every new result ---- */
-.anim-replay { animation: answerIn .42s cubic-bezier(.2,.7,.3,1) both; }
+/* ---- answer panel ---- */
+.anim-replay { animation: answerIn .45s cubic-bezier(.2,.7,.3,1) both; }
 @keyframes answerIn {
-    from { opacity: 0; transform: translateY(7px); }
+    from { opacity: 0; transform: translateY(6px); }
     to   { opacity: 1; transform: none; }
 }
-.placeholder { color: var(--ink-faint) !important; font-style: italic; padding: 30px 0;
-               text-align: center; }
+/* Card 02 has far less content than card 01. Without a floor it renders as a
+   short stub beside a tall card and the row looks broken, so give the answer
+   area a minimum height that balances the two. */
+#answer { min-height: 330px; }
+.placeholder { color: var(--ink-faint) !important; font-style: normal; padding: 40px 0;
+               text-align: center; font-size: .92rem; }
 
 /* ---- buttons ---- */
 button {
-    border-radius: 11px !important;
-    font-weight: 650 !important;
-    letter-spacing: .005em !important;
-    color: var(--ink) !important;
-    transition: transform .16s ease, box-shadow .2s ease, filter .2s ease,
-                background-color .3s ease !important;
+    border-radius: 8px !important; font-weight: 560 !important;
+    letter-spacing: 0 !important; font-size: .88rem !important;
+    box-shadow: none !important;
+    transition: transform .15s ease, box-shadow .2s ease, filter .2s ease,
+                background-color .35s ease, color .35s ease !important;
 }
-button:hover:not(:disabled) { transform: translateY(-1px); filter: brightness(1.04); }
+button:hover:not(:disabled) { filter: brightness(.96); }
+button.primary:hover:not(:disabled) { transform: translateY(-1px);
+                                      box-shadow: 0 6px 18px rgba(0,0,0,.16) !important; }
 button:active:not(:disabled) { transform: translateY(0) scale(.985); }
-button:focus-visible, textarea:focus-visible, input:focus-visible, select:focus-visible {
-    outline: 3px solid var(--ring) !important;
-    outline-offset: 2px !important;
+button:focus-visible, textarea:focus-visible, input:focus-visible,
+select:focus-visible, [tabindex]:focus-visible {
+    outline: 2px solid var(--ring) !important; outline-offset: 2px !important;
 }
-button.primary {
-    background: linear-gradient(135deg, var(--copper) 0%, var(--copper-dk) 100%) !important;
-    border: none !important; color: #fff !important;
-    box-shadow: 0 2px 8px rgba(0,0,0,.24) !important;
-}
-button.primary:hover:not(:disabled) { box-shadow: 0 6px 20px rgba(0,0,0,.32) !important; }
-button.primary::after {
-    content: ""; position: absolute; inset: 0; border-radius: 11px;
-    background: linear-gradient(115deg, transparent 30%, rgba(255,255,255,.34) 50%,
-                                transparent 70%);
-    background-size: 220% 100%;
-    animation: sheen 3.6s ease-in-out infinite;
-    pointer-events: none;
-}
-@keyframes sheen {
-    0%, 62% { background-position: 190% 0; }
-    100%    { background-position: -60% 0; }
-}
+button.primary { font-weight: 600 !important; }
 
 /* ---- inputs ---- */
 textarea, input, select {
-    border-color: var(--line) !important;
-    border-radius: 11px !important;
-    background: var(--surface-2) !important;
-    color: var(--ink) !important;
-    caret-color: var(--copper) !important;
-    transition: border-color .2s ease, box-shadow .2s ease, background-color .3s ease !important;
+    border-radius: 8px !important; border-color: var(--line) !important;
+    background: var(--surface-2) !important; color: var(--ink) !important;
+    caret-color: var(--clay) !important;
+    transition: border-color .2s ease, box-shadow .2s ease,
+                background-color .35s ease !important;
 }
 textarea:focus, input:focus, select:focus {
-    border-color: var(--copper) !important;
+    border-color: var(--clay) !important;
     box-shadow: 0 0 0 3px var(--ring) !important;
 }
 textarea::placeholder, input::placeholder { color: var(--ink-faint) !important;
                                             opacity: 1 !important; }
 .block, .form, .panel, .gr-box { background: transparent !important; }
-.tabs > .tab-nav { border-bottom: 1px solid var(--line) !important; }
-.tabs > .tab-nav button { font-weight: 650 !important; color: var(--ink-soft) !important; }
-.tabs > .tab-nav button.selected { color: var(--copper) !important;
-                                   border-bottom: 2px solid var(--copper) !important; }
-
-/* ---- answer typography ---- */
-.anim-replay strong, .anim-replay b { color: var(--ink) !important; }
-.anim-replay small { color: var(--ink-faint) !important; }
-.anim-replay a { color: var(--teal) !important; }
-
-/* ---- theme toggle ---- */
-#theme-toggle { min-width: 108px; }
+.spacer { background: transparent !important; }
+#theme-toggle { min-width: 104px !important; }
 
 @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after {
@@ -252,6 +283,47 @@ textarea::placeholder, input::placeholder { color: var(--ink-faint) !important;
 }
 """
 
+# Fills card 01 and presses Decide from the URL, so tools/snapshot.py can capture
+# a REAL end-to-end result rather than an empty card. Not a mock: this drives the
+# actual page, the actual button and the actual model.
+PREFILL_JS = """
+() => {
+  const SAMPLE = {SAMPLE_JSON};
+  const q = new URL(window.location.href).searchParams;
+  if (q.get('sample') === null) return;
+  const item = SAMPLE[parseInt(q.get('sample'), 10) || 0];
+  if (!item) return;
+
+  const put = (el, value) => {
+    const proto = el instanceof HTMLTextAreaElement
+      ? HTMLTextAreaElement : HTMLInputElement;
+    Object.getOwnPropertyDescriptor(proto.prototype, 'value').set.call(el, value);
+    el.dispatchEvent(new Event('input', {bubbles: true}));
+    el.dispatchEvent(new Event('change', {bubbles: true}));
+  };
+
+  const fire = () => {
+    const areas = Array.from(document.querySelectorAll('textarea'));
+    if (!areas.length) { setTimeout(fire, 300); return; }
+    put(areas[0], item.text);
+    const select = document.querySelector('select');
+    if (select) {
+      const opt = Array.from(select.options).find(o => o.value === item.preset);
+      if (opt) { select.value = item.preset;
+                 select.dispatchEvent(new Event('change', {bubbles: true})); }
+    }
+    setTimeout(() => {
+      const btn = document.querySelector('#run button') ||
+                  document.querySelector('#run') ||
+                  document.querySelector('button.primary');
+      if (btn) btn.click();
+    }, 500);
+  };
+  setTimeout(fire, 900);
+}
+"""
+
+
 # Applies the chosen theme before first paint, so there is no white flash.
 THEME_BOOT_JS = """
 () => {
@@ -259,9 +331,12 @@ THEME_BOOT_JS = """
   const root = document.documentElement;
   let saved = null;
   try { saved = localStorage.getItem(KEY); } catch (e) {}
-  if (saved === 'dark' || saved === 'light') {
-    root.setAttribute('data-theme', saved);
-  }
+  // A saved choice wins. Otherwise ?__theme= deep-links a theme, which is how
+  // tools/snapshot.py captures light and dark deterministically.
+  const q = new URL(window.location.href).searchParams.get('__theme');
+  const want = (saved === 'dark' || saved === 'light') ? saved
+             : (q === 'dark' || q === 'light') ? q : null;
+  if (want) root.setAttribute('data-theme', want);
   const paint = () => {
     const dark = root.getAttribute('data-theme') === 'dark' ||
       (!root.getAttribute('data-theme') &&
@@ -285,6 +360,98 @@ THEME_BOOT_JS = """
 """
 
 PRESET_CHOICES = list(presets.PRESETS)
+
+# The Claude palette, expressed as Gradio theme objects.
+#
+# This has to go through the theme API, not just CSS. Gradio styles its own
+# components (buttons, labels, tabs, focus rings) from the theme object at
+# runtime, so a CSS variable override never reaches them - which is exactly why
+# the Decide button stayed blue and the label pills stayed blue however hard the
+# stylesheet pushed. CARD_CSS then handles only the bespoke card chrome.
+CLAY = gr.themes.Color(
+    name="clay", c50="#fdf3ee", c100="#f9e3d8", c200="#f3c7b1", c300="#eba98a",
+    c400="#e28a64", c500="#d97757", c600="#c05f40", c700="#9d4a31",
+    c800="#7a3824", c900="#572616", c950="#2e130b")
+
+WARM_NEUTRAL = gr.themes.Color(
+    name="warm", c50="#faf9f5", c100="#f2f0e9", c200="#e3e1d9", c300="#d0cdc3",
+    c400="#b0ada3", c500="#918e85", c600="#6e6d67", c700="#5c5b57",
+    c800="#3d3d3a", c900="#1f1e1d", c950="#0e0e0d")
+
+WARM_SECONDARY = gr.themes.Color(
+    name="stone", c50="#f4f2ee", c100="#e8e4dc", c200="#d5cfc4", c300="#bcb3a4",
+    c400="#a2977f", c500="#8a7d62", c600="#71664f", c700="#5a513f",
+    c800="#433c2f", c900="#2d281f", c950="#171410")
+
+
+def light_theme():
+    """The Claude palette as a Gradio theme.
+
+    Values are filtered against the keys this Gradio build actually accepts, so a
+    Gradio upgrade that renames a variable degrades to "that one control keeps the
+    default" instead of crashing the app on import. Everything the build does
+    accept is applied.
+    """
+    import inspect
+
+    clay, ink, soft, faint = "#d97757", "#1f1e1d", "#5c5b57", "#6e6d67"
+    page, surface, raised = "#f5f4ed", "#ffffff", "#faf9f5"
+    line = "#e3e1d9"
+    dpage, dsurface, draised = "#1f1e1d", "#262624", "#30302e"
+    dline, dink, dsoft = "#3e3e3c", "#f5f4ed", "#c2c2c0"
+
+    want = {
+        "body_background_fill": page, "body_background_fill_dark": dpage,
+        "body_text_color": ink, "body_text_color_dark": dink,
+        "body_text_color_subdued": soft, "body_text_color_subdued_dark": dsoft,
+        "background_fill_primary": page, "background_fill_primary_dark": dpage,
+        "block_background_fill": surface, "block_background_fill_dark": dsurface,
+        "block_border_color": line, "block_border_color_dark": dline,
+        "block_title_text_color": ink, "block_title_text_color_dark": dink,
+        # Claude labels are plain small muted text, not coloured chips
+        "block_label_background_fill": "transparent",
+        "block_label_background_fill_dark": "transparent",
+        "block_label_border_color": "transparent",
+        "block_label_border_color_dark": "transparent",
+        "block_label_text_color": soft, "block_label_text_color_dark": dsoft,
+        "block_info_background_fill": raised,
+        "block_info_background_fill_dark": draised,
+        "border_color_primary": line, "border_color_primary_dark": dline,
+        "input_background_fill": raised, "input_background_fill_dark": draised,
+        "input_background_fill_focus": surface,
+        "input_background_fill_focus_dark": dsurface,
+        "input_border_color": line, "input_border_color_dark": dline,
+        # near-black pill in light, cream pill in dark - Claude's primary button
+        "button_primary_background_fill": ink,
+        "button_primary_background_fill_dark": dink,
+        "button_primary_background_fill_hover": "#000000",
+        "button_primary_background_fill_hover_dark": "#ffffff",
+        "button_primary_text_color": page,
+        "button_primary_text_color_dark": ink,
+        "button_primary_border_color": ink,
+        "button_primary_border_color_dark": dink,
+        "button_secondary_background_fill": raised,
+        "button_secondary_background_fill_dark": draised,
+        "button_secondary_text_color": ink, "button_secondary_text_color_dark": dink,
+        "button_secondary_border_color": line,
+        "button_secondary_border_color_dark": dline,
+        "button_cancel_background_fill": raised,
+        "button_cancel_background_fill_dark": draised,
+        "table_even_background_fill": raised,
+        "table_even_background_fill_dark": draised,
+        "table_odd_background_fill": surface,
+        "table_odd_background_fill_dark": dsurface,
+    }
+
+    base = gr.themes.Base(primary_hue=CLAY, secondary_hue=WARM_SECONDARY,
+                          neutral_hue=WARM_NEUTRAL)
+    accepted = set(inspect.signature(base.set).parameters)
+    applied = {k: v for k, v in want.items() if k in accepted}
+    dropped = sorted(set(want) - set(applied))
+    if dropped:
+        print(f"[laya] theme: this Gradio build has no {', '.join(dropped)}")
+    return base.set(**applied)
+
 
 # Restarts the answer fade on every update. Runs in the browser, once, on load.
 REPLAY_JS = """
@@ -409,7 +576,7 @@ def build():
     preset_info = "\n".join(
         f"- **{n}** — {p['label']}: {p['note']}" for n, p in presets.PRESETS.items())
 
-    with gr.Blocks(title="Laya", theme=gr.themes.Soft(), css=CARD_CSS) as demo:
+    with gr.Blocks(title="Laya", theme=light_theme(), css=CARD_CSS) as demo:
         with gr.Row():
             gr.Markdown(
                 "# Laya\n\n"
@@ -425,13 +592,13 @@ def build():
         with gr.Tabs():
             # ============================== cards 01 + 02 ==============================
             with gr.Tab("Decide", id="decide"):
-                with gr.Row(equal_height=False):
+                with gr.Row(equal_height=True):
                     with gr.Column(elem_classes=["card"], scale=1, min_width=430):
                         with gr.Row(elem_classes=["card-top"]):
                             gr.HTML('<span class="card-num">01</span>')
                             gr.HTML('<span class="card-title">The question</span>')
                             run_btn = gr.Button("Decide ▶", variant="primary", scale=0,
-                                                min_width=130)
+                                                min_width=130, elem_id="run")
                         message = gr.Textbox(
                             label="Message", lines=10, show_label=False,
                             placeholder="Paste a ticket, email or message here...")
@@ -444,11 +611,12 @@ def build():
                             lines=4,
                             placeholder='{"my_key": {"type": "noul", "instructions": "..."}}')
 
-                    with gr.Column(elem_classes=["card"], scale=1, min_width=430):
+                    with gr.Column(elem_classes=["card"], scale=1, min_width=430,
+                                   variant="compact"):
                         with gr.Row(elem_classes=["card-top"]):
                             gr.HTML('<span class="card-num">02</span>')
                             gr.HTML('<span class="card-title">The answer</span>')
-                            clear_btn = gr.Button("Clear", scale=0, min_width=90)
+                            clear_btn = gr.Button("Clear", scale=0, min_width=84, size="sm")
                         answer = gr.Markdown(
                             '<div class="placeholder">Nothing yet. Press '
                             '<b>Decide</b> in card 01.</div>',
@@ -544,6 +712,9 @@ def build():
         # Gradio has swapped the content, so no polling and no double-binding.
         demo.load(js=REPLAY_JS)
         demo.load(js=THEME_BOOT_JS)
+        demo.load(js=PREFILL_JS.replace("{SAMPLE_JSON}", json.dumps(
+            [{"text": e["text"], "preset": e["preset"]} for e in presets.EXAMPLES],
+            ensure_ascii=False)))
         theme_btn.click(js="() => window.__layaToggleTheme && window.__layaToggleTheme()")
     return demo
 

@@ -17,7 +17,11 @@ REPO = Path(__file__).resolve().parents[1]
 CSS = (REPO / "src" / "laya_chat" / "app.py").read_text(encoding="utf-8")
 
 # Which surface each text token is read against.
-ON_SURFACE = ["--ink", "--ink-soft", "--ink-faint", "--teal", "--good", "--bad"]
+ON_SURFACE = ["--ink", "--ink-soft", "--ink-faint", "--good", "--bad"]
+# Non-text accents still need 3:1 to be perceivable as UI boundaries.
+INDICATORS = ["--clay", "--clay-dk", "--line-hi"]
+# Foreground/background pairs that Gradio renders as buttons.
+BUTTON_PAIRS = [("light", "#1f1e1d", "#f5f4ed"), ("dark", "#f5f4ed", "#1f1e1d")]
 AA_BODY = 4.5
 AA_LARGE = 3.0
 
@@ -90,11 +94,31 @@ for name, palette in (("light", light), ("dark", dark)):
 
 # Non-text indicators still need 3:1 to be perceivable.
 for name, palette in (("light", light), ("dark", dark)):
-    ratio = contrast(palette["--copper"], palette["--surface"])
-    rows.append((name, "--copper (indicator)", palette["--copper"], palette["--surface"],
-                 ratio, ratio >= AA_LARGE))
-    if ratio < AA_LARGE:
-        failures.append(f"{name} --copper indicator {ratio:.2f}:1 (needs {AA_LARGE})")
+    for token in INDICATORS:
+        if token not in palette:
+            continue
+        ratio = contrast(palette[token], palette["--surface"])
+        rows.append((name, f"{token} (border)", palette[token], palette["--surface"],
+                     ratio, ratio >= AA_LARGE))
+        if ratio < AA_LARGE:
+            failures.append(f"{name} {token} border {ratio:.2f}:1 (needs {AA_LARGE})")
+
+# The primary button is the most prominent text on the page: label on fill.
+for name, fg, bg in BUTTON_PAIRS:
+    ratio = contrast(fg, bg)
+    rows.append((name, "primary button label", fg, bg, ratio, ratio >= AA_BODY))
+    if ratio < AA_BODY:
+        failures.append(f"{name} primary button label {ratio:.2f}:1 (needs {AA_BODY})")
+
+# The 01/02 badge: white on clay in light, near-black on clay in dark.
+badge_light = contrast("#ffffff", light.get("--clay-dk", "#000000"))
+badge_dark = contrast("#1f1e1d", dark.get("--clay", "#ffffff"))
+for name, ratio in (("light", badge_light), ("dark", badge_dark)):
+    rows.append((name, "card number badge", "#fff/#1f1e1d",
+                 light.get("--clay-dk") if name == "light" else dark.get("--clay"),
+                 ratio, ratio >= AA_BODY))
+    if ratio < AA_BODY:
+        failures.append(f"{name} card number badge {ratio:.2f}:1 (needs {AA_BODY})")
 
 # The two palettes must actually differ, or dark mode is not really implemented.
 same = [t for t in light if t in dark and light[t].lower() == dark[t].lower()]

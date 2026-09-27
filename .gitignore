@@ -5,6 +5,12 @@
 .venv/
 .data/
 
+# Browser profile used by tools/snapshot.py to take the README screenshots.
+# Brave HANGS in headless on a fresh profile, so it must be reused, not deleted -
+# but it is machine state and must never be committed.
+docs/screenshots/_brave_profile/
+docs/screenshots/_profile_*/
+
 __pycache__/
 *.py[cod]
 *.egg-info/
