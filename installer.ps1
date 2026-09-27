@@ -37,7 +37,12 @@ param(
     [switch]$ForceModels
 )
 
-$ErrorActionPreference = 'Stop'
+# Native commands are checked explicitly via $LASTEXITCODE throughout. If this
+# stayed at 'Stop', any python warning printed to stderr would raise
+# NativeCommandError and abort the install - which is exactly what happened when
+# the torch probe below ran against an environment where torch was not yet
+# installed, killing the installer six seconds in.
+$ErrorActionPreference = 'Continue'
 Set-Location $PSScriptRoot
 
 # torch 2.14 is the last release built for CUDA 12.x. CUDA 13.0 REMOVED Pascal
@@ -102,8 +107,13 @@ if (-not (Test-Path -LiteralPath $venvPy)) {
 }
 
 # ---------------------------------------------------------------- 4. torch
-$torchNow = & $venvPy -c "import torch; print(torch.__version__)" 2>$null
-if ($torchNow) {
+# Probe with find_spec so a missing torch is an exit code, not a traceback.
+$hasTorch = $false
+& $venvPy -c "import importlib.util,sys; sys.exit(0 if importlib.util.find_spec('torch') else 1)" 2>$null | Out-Null
+if ($LASTEXITCODE -eq 0) { $hasTorch = $true }
+$torchNow = ''
+if ($hasTorch) { $torchNow = (& $venvPy -c "import torch; print(torch.__version__)" 2>$null) -join '' }
+if ($hasTorch) {
     Head "torch already installed: $torchNow"
 } else {
     if ($uv) {
